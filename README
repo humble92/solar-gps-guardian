@@ -1,0 +1,21 @@
+# 🌌 Solar-GPS-Guardian (Space Weather & Autonomous Nav Shield)
+
+> **Meta Global AI Developer Hackathon Project**  
+> An intelligent prediction and real-time alert web app that leverages public space weather data (NOAA/NASA) and Meta's AI models to mitigate solar storm-induced GPS glitches in autonomous vehicles.
+
+---
+
+## 🚀 Overview
+Recent findings on solar superstorms crashing autonomous vehicles via GPS disruptions highlighted a critical vulnerability in modern autonomous navigation. **Solar-GPS-Guardian** bridges public space weather telemetry with cutting-edge AI agents to predict, monitor, and alert autonomous systems and drivers in real-time.
+
+## 🛠️ Tech Stack
+* **AI & Models:** Meta Open-Weight Models (`Muse Spark Open`) via [Baseten](https://baseten.co) / [Fireworks](https://fireworks.ai)
+* **Backend & Infrastructure:** [Modal](https://modal.com) (Serverless functions, data ingestion pipelines, and agent sandboxes)
+* **Data Sources:** NOAA SWPC & NASA DONKI (Real-time Kp-index, Solar Flare, and Geomagnetic storm telemetry)
+* **Frontend:** Interactive Web App (Map visualization & instant alert dashboard)
+
+---
+
+## 🏆 Hackathon Tracks & Alignment
+* **Track:** Indie Developer
+* **Problem Statement:** *Push the Frontier* / *Build for Your World*
