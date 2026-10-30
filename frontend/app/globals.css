@@ -34,6 +34,18 @@ button.ghost { background: transparent; color: var(--amber); border: 1px solid v
 .banner { border: 1px solid var(--line); border-left: 5px solid var(--amber);
   background: var(--panel); border-radius: 6px; padding: 12px 14px; margin-bottom: 14px; }
 .banner.critical { border-left-color: var(--red); }
+.topbar { display: flex; justify-content: space-between; align-items: center;
+  max-width: 1080px; margin: 0 auto; padding: 14px 16px 0; }
+.topbar .brand { color: var(--text); font-weight: 700; text-decoration: none; font-size: 17px; }
+.topnav { display: flex; gap: 16px; }
+.topnav a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600; }
+.topnav a:hover { color: var(--amber); }
+.md img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
+.md table { border-collapse: collapse; margin: 12px 0; }
+.md th, .md td { border: 1px solid var(--line); padding: 6px 10px; font-size: 14px; }
+.md th { background: var(--panel2); text-align: left; }
+.nl-item { display: block; padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.nl-item:hover { color: var(--amber); }
 .leaflet-container { background: #0e141b; }
 /* Self-drawn location pin (replaces Leaflet's marker-icon.png, which 404s
    under Next.js bundling). Amber normally, red in storm simulation. */

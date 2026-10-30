@@ -14,7 +14,7 @@ host.
 | Nominatim and the public OSRM server | Place lookup and driving geometry. Called by the browser. |
 | Modal | 15-minute ingest, hourly storm check, daily digest, and the HTTP API. |
 | SQLite on a Modal Volume | One subscriptions table, one snapshot row, one send log. Locally the file is `data/guardian.db`. |
-| Baseten, then Fireworks | Optional prose. If both are absent or the echoed score does not match, the template sentence from `risk.py` is used. |
+| Baseten, then Fireworks | Optional prose + monthly newsletter writing. If both are absent or the echoed score does not match, the template sentence from `risk.py` is used. |
 | SMTP | Real mail only from the deployed batch. Local `--batch` writes `data/outbox/*.eml`. |
 
 `backend/app.py` is the only module that imports Modal. Providers, the risk
@@ -49,7 +49,9 @@ stereo, enlil.
 DONKI is the only live provider called from `region="us"`, because
 `ccmc.gsfc.nasa.gov` timed out from Ontario on 2026-10-29. The other
 providers run in Modal's default region. CDAWeb and OMNI are not on this
-live list. They are probed by `sandbox/us_fetch_modal.py`.
+live list. They are probed by `sandbox/us_fetch_modal.py`. The monthly
+newsletter plan (`implementation.md` §3.5) adopts OMNI aggregates for the
+retrospective; CDAWeb stays out (OMNI is already its curated composite).
 
 `NASA_API_KEY` is kept in `.env` and in the Modal secret `nasa-api`. The
 CCMC DONKI host does not receive it.
@@ -80,6 +82,12 @@ Python template, not the LLM paragraph.
 When an LLM is configured, it receives the finished score and must end with
 `SCORE: <that number>`. Any other number is discarded and the template
 remains. The order is Baseten, then Fireworks, then the template.
+
+The same LLM writes the monthly newsletter from a fixed-number archive
+package (DONKI events, Kyoto Dst, GFZ Kp, OMNI solar-wind aggregates):
+numbers only from the package, plus a one-line commentary per section.
+The package is collected on demand at publish time; no snapshot history
+is kept. See `implementation.md` Phase 7 for the contract and validation.
 
 ## Why this pipeline
 

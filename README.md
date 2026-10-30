@@ -4,7 +4,10 @@ Live site: https://solar-gps-guardian.ninefruits.work/
 
 A public space-weather dashboard and email alert for GPS risk. The score is
 a fixed formula over open data. A language model may rewrite the sentence
-only when it repeats that score.
+only when it repeats that score. The same model also writes a monthly
+newsletter: each issue aggregates last month's open-data archives
+(DONKI events, Kyoto Dst, GFZ Kp, OMNI solar wind) into a short
+retrospective with charts.
 
 No login. A subscription is an email address and a region.
 
@@ -21,7 +24,12 @@ Recorded live checks from 2026-10-29 are in [sandbox/results](sandbox/results/RE
 Every 15 minutes the deployed service reads ten open-data providers and
 stores one snapshot. The page shows Kp, the 3-day forecast, the strongest
 recent flare, a map, and a driving-route check. Subscribers get one daily
-digest and an extra message when the storm rule trips.
+digest and an extra message when the storm rule trips. On the 1st of each
+month the service publishes an LLM-written newsletter (site menu:
+Newsletters) recapping last month's space weather from the archives.
+A manual issue (`POST /newsletters/generate`, steps in
+[Operation.md](docs/Operation.md)) uses the last complete month, so it
+never duplicates the monthly cron run.
 
 The score is 10 points per Kp (current or forecast maximum, whichever is
 larger), plus 15 for an M-class flare, 25 for an X-class flare, 20 if an

@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS telemetry_cache(
 CREATE TABLE IF NOT EXISTS send_log(
   id INTEGER PRIMARY KEY, email TEXT, kind TEXT, event_key TEXT,
   sent_at REAL, UNIQUE(email, kind, event_key));
+CREATE TABLE IF NOT EXISTS newsletters(
+  id INTEGER PRIMARY KEY, period TEXT UNIQUE NOT NULL,
+  title TEXT, markdown TEXT, chart_svg TEXT, package TEXT, created_at REAL);
 """
 
 
@@ -83,3 +86,31 @@ class Store:
         with self._lock, self._conn() as c:
             c.execute("INSERT OR IGNORE INTO send_log(email,kind,event_key,sent_at)"
                       " VALUES(?,?,?,?)", (email, kind, event_key, time.time()))
+
+    # newsletters ------------------------------------------------------
+    def save_newsletter(self, period, title, markdown, chart_svg, package):
+        with self._lock, self._conn() as c:
+            c.execute(
+                "INSERT INTO newsletters(period,title,markdown,chart_svg,package,created_at)"
+                " VALUES(?,?,?,?,?,?) ON CONFLICT(period) DO UPDATE SET"
+                " title=excluded.title, markdown=excluded.markdown,"
+                " chart_svg=excluded.chart_svg, package=excluded.package,"
+                " created_at=excluded.created_at",
+                (period, title, markdown, chart_svg,
+                 json.dumps(package), time.time()))
+            return c.execute("SELECT id FROM newsletters WHERE period=?",
+                             (period,)).fetchone()["id"]
+
+    def list_newsletters(self):
+        with self._conn() as c:
+            return [dict(r) for r in c.execute(
+                "SELECT id,period,title,created_at FROM newsletters ORDER BY period DESC")]
+
+    def get_newsletter(self, nid):
+        with self._conn() as c:
+            row = c.execute("SELECT * FROM newsletters WHERE id=?", (nid,)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            d["package"] = json.loads(d["package"]) if d.get("package") else None
+            return d

@@ -155,6 +155,39 @@ come from the code:
 stays on the UTC clock. Redeploying replaces the previous schedules. No
 separate cron form is required in the Modal UI.
 
+## Monthly newsletter (manual issue)
+
+The monthly run also comes from the code (`monthly_newsletter` at
+`Cron("5 0 1 * *")`), but one issue can be published on demand without
+waiting for the 1st. The default period is the last complete month, so a
+manual run now and the cron run later land on different periods and never
+duplicate; calling the same period twice regenerates it in place
+(`period` is UNIQUE, upsert on save).
+
+```bash
+API=https://humble92--solar-gps-guardian-api.us-east.modal.run
+
+# Publish last complete month (e.g. September when run in October)
+curl -X POST "$API/newsletters/generate" \
+  -H "Content-Type: application/json" -d '{}'
+
+# Publish a named period
+curl -X POST "$API/newsletters/generate" \
+  -H "Content-Type: application/json" -d '{"period":"2026-09"}'
+
+# Verify: list, body, chart
+curl "$API/newsletters"
+curl "$API/newsletters/1"
+curl -o chart.svg "$API/newsletters/1/chart.svg"
+```
+
+The response is `{id, period, title, source, sources_ok}`. `source` is
+`baseten`/`fireworks` when an LLM key is configured, otherwise `template`.
+`sources_ok` reports per-source collection status (`donki` fails from
+non-US networks by design; `kyoto_dst`/`gfz_kp` work globally). The rows
+land in the `newsletters` table of `/data/guardian.db` on the Modal Volume,
+so they survive redeploys and appear under the site's `Newsletters` menu.
+
 Pushing `main` runs `.github/workflows/modal-deploy.yml`, which executes
 `modal deploy backend/app.py`. The workflow does nothing until the two GitHub
 secrets exist. The `nasa-api` and `mail-smtp` secrets must already exist in

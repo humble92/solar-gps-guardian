@@ -162,6 +162,18 @@ def storm_watch():
         _log_placement("storm_watch.end")
 
 
+@app.function(**_function_kwargs(timeout=600, schedule=modal.Cron("5 0 1 * *")))
+def monthly_newsletter():
+    _log_placement("monthly_newsletter.start")
+    try:
+        from backend import newsletter
+        out = newsletter.generate(_store())
+        vol.commit()
+        return out
+    finally:
+        _log_placement("monthly_newsletter.end")
+
+
 @app.function(**_function_kwargs())
 @modal.asgi_app()
 def api():
@@ -215,6 +227,34 @@ def api():
         if not mailer.verify(email, token):
             return {"ok": False, "error": "bad token"}
         return {"ok": _store().unsubscribe(email)}
+
+    @web.get("/newsletters")
+    def newsletters():
+        return _store().list_newsletters()
+
+    @web.get("/newsletters/{nid}")
+    def newsletter_one(nid: int):
+        row = _store().get_newsletter(nid)
+        if not row:
+            return {"error": "not found"}
+        row.pop("chart_svg", None)
+        return row
+
+    @web.get("/newsletters/{nid}/chart.svg")
+    def newsletter_chart(nid: int):
+        from fastapi.responses import Response
+        row = _store().get_newsletter(nid)
+        svg = (row or {}).get("chart_svg")
+        if not svg:
+            return Response(content="", media_type="image/svg+xml", status_code=404)
+        return Response(content=svg, media_type="image/svg+xml")
+
+    @web.post("/newsletters/generate")
+    def newsletter_generate(body: dict):
+        from backend import newsletter
+        out = newsletter.generate(_store(), period=body.get("period"))
+        vol.commit()
+        return out
 
     _log_placement("api.build.end")
     return web
