@@ -2,7 +2,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import {
-  DEMO_SNAPSHOT, fetchSnapshot, geocode, osrmRoute, scoreSnapshot, subscribe,
+  DEMO_SNAPSHOT, fetchSnapshot, geocode, osrmRoute, reverseGeocode, scoreSnapshot, subscribe,
   type Risk, type Snapshot,
 } from "@/lib/api";
 
@@ -40,7 +40,15 @@ export default function Home() {
       .catch((e) => setErr(String(e)));
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (p) => { setLoc([p.coords.latitude, p.coords.longitude]); setLocName("Your location"); },
+        (p) => {
+          const lat = p.coords.latitude;
+          const lon = p.coords.longitude;
+          setLoc([lat, lon]);
+          setLocName("Your location");
+          reverseGeocode(lat, lon)
+            .then((name) => { if (name) setLocName(name); })
+            .catch(() => {});
+        },
         () => {}, { timeout: 8000 });
     }
   }, []);

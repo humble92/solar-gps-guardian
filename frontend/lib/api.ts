@@ -48,6 +48,19 @@ export async function fetchSnapshot(): Promise<{ snap: Snapshot; live: boolean }
   return { snap: await r.json(), live: true };
 }
 
+/** Nearest city, town, or village for a browser position. Null if lookup fails. */
+export async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
+  const r = await fetch(
+    "https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&zoom=10" +
+    `&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`,
+    { headers: { "User-Agent": "SolarGPSGuardian/1.0" } });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const a = j.address || {};
+  const name = a.city || a.town || a.village || a.municipality || a.hamlet;
+  return typeof name === "string" && name ? name : null;
+}
+
 export async function geocode(q: string): Promise<{ lat: number; lon: number; name: string } | null> {
   const r = await fetch(
     `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
