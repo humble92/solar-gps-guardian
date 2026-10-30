@@ -1,6 +1,6 @@
 # Solar-GPS-Guardian
 
-Live site: https://solar-gps-guardian.vercel.app/
+Live site: https://solar-gps-guardian.ninefruits.work/
 
 A public space-weather dashboard and email alert for GPS risk. The score is
 a fixed formula over open data. A language model may rewrite the sentence
