@@ -1,0 +1,3 @@
+# Fetchers are stdlib-only (urllib + json) — nothing to install.
+# Only us_fetch_modal.py needs an extra package at deploy time:
+#   pip install modal

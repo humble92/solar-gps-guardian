@@ -1,0 +1,25 @@
+Command: uv run python sandbox/nasa_donki.py
+When: 2026-10-29T22:56:16Z
+Result: 11/11 endpoints reachable. CME returned 27 events after the earlier timeout.
+
+DONKI broadcast 2026-10-22..2026-10-29 (https://ccmc.gsfc.nasa.gov/DONKI-API/get)
+
+======================================================================
+DONKI event catalogs
+  src: https://ccmc.gsfc.nasa.gov/DONKI-API/get
+  fetched_at(utc): 2026-10-29T22:56:16Z
+======================================================================
+  CME: 27 event(s) | first=2026-10-22T20:12:00-CME-001 last=2026-10-29T10:36:00-CME-001
+  CMEAnalysis: 15 event(s) | first=? last=?
+  GST: 0 event(s)
+  IPS: 1 event(s) | first=2026-10-25T12:20:00-IPS-001 last=2026-10-25T12:20:00-IPS-001
+  FLR: 3 event(s) | first=? last=? | max class=C2.8
+  SEP: 0 event(s)
+  MPC: 0 event(s)
+  RBE: 2 event(s) | first=? last=?
+  HSS: 1 event(s) | first=? last=?
+  WSAEnlilSimulations: 14 event(s) | first=? last=?
+  notifications: 10 event(s) | first=20261022-AL-001 last=20261028-7D-001
+
+11/11 DONKI endpoints reachable at 2026-10-29T22:56:18Z.
+OK: DONKI pipeline works.

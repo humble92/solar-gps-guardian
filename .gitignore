@@ -1,0 +1,19 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.local
+data/
+
+# node
+node_modules/
+.next/
+.npm-cache/
+frontend/.next/
+
+# os/editor
+.DS_Store
+
+# docs
+docs/Implementation.md

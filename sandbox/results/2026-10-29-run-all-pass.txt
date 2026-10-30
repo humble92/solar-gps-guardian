@@ -1,0 +1,133 @@
+Command: uv run python sandbox/run_all.py
+When: 2026-10-29T22:56:24Z through 22:56:42Z
+Result: all five checks passed, including DONKI 11/11. CME returned 27 events.
+This is the retry a few minutes after the CME timeout.
+
+######################################################################
+# NOAA Kp-index (doc 1/3): noaa_kp_index.py
+######################################################################
+3-hourly planetary Kp
+  src: https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json
+  fetched_at(utc): 2026-10-29T22:56:24Z
+  2026-10-29T09:00:00  Kp=0.33  a_running=2 stations=8  -> No storm (Kp<5)
+  2026-10-29T12:00:00  Kp=0.33  a_running=2 stations=8  -> No storm (Kp<5)
+  2026-10-29T15:00:00  Kp=0.33  a_running=2 stations=8  -> No storm (Kp<5)
+  2026-10-29T18:00:00  Kp=0.33  a_running=2 stations=8  -> No storm (Kp<5)
+  LATEST: 2026-10-29T18:00:00 Kp=0.33 (No storm (Kp<5))
+
+1-min estimated planetary Kp (latest)
+  src: https://services.swpc.noaa.gov/json/planetary_k_index_1m.json
+  fetched_at(utc): 2026-10-29T22:56:24Z
+  2026-10-29T22:52:00  estimated_kp=0.33 kp=0P
+
+NOAA scales
+  fetched_at(utc): 2026-10-29T22:56:24Z
+  G-scale: {'Scale': '0', 'Text': 'none'}
+  R-scale: {'Scale': '0', 'Text': 'none', 'MinorProb': None, 'MajorProb': None}
+  S-scale: {'Scale': '0', 'Text': 'none', 'Prob': None}
+
+Kp forecast JSON (tail)
+  fetched_at(utc): 2026-10-29T22:56:25Z
+  2026-10-31T15:00:00 kp=3.0 predicted noaa_scale=None
+  2026-10-31T18:00:00 kp=3.67 predicted noaa_scale=None
+  2026-10-31T21:00:00 kp=4.0 predicted noaa_scale=None
+  2026-11-01T00:00:00 kp=3.67 predicted noaa_scale=None
+
+OK: Kp-index pipeline works (no key needed).
+
+######################################################################
+# NOAA Solar Flare reports (doc 2/3): noaa_solar_flare_reports.py
+######################################################################
+  fetched_at(utc): 2026-10-29T22:56:25Z
+  begin=2026-10-28T12:38:00Z max=2026-10-28T12:52:00Z max_class=B6.4 (below R-scale) end=2026-10-28T13:03:00Z sat=GOES-18
+  total flares in 7d: 50
+  M/X-class in 7d: 0
+    2026-10-28T08:39:00Z B8.4 (below R-scale)
+    2026-10-28T11:09:00Z B6.3 (below R-scale)
+    2026-10-28T12:52:00Z B6.4 (below R-scale)
+  2026-10-29T22:51:00Z long=0.00e+00 short=0.00e+00 sat=GOES-18
+  2026-10-29T22:52:00Z long=0.00e+00 short=0.00e+00 sat=GOES-18
+  SUVI time_tag 2026-10-27T02:48:00Z satellite 19 (record truncated in the capture)
+  :Product: 20261029events.txt
+  :Created: 2026 Oct 29 2252 UT
+  NO EVENT REPORTS.
+
+OK: Solar Flare report pipeline works (no key needed).
+
+######################################################################
+# NOAA 3-day geomag forecast (doc 3/3): noaa_3day_geomag_forecast.py
+######################################################################
+  fetched_at(utc): 2026-10-29T22:56:25Z
+  :Issued: 2026 Oct 29 2205 UTC
+  Observed Ap 28 Oct 007
+  Estimated Ap 29 Oct 006
+  Predicted Ap 30 Oct-01 Nov 012-028-020
+  Active                35/20/30
+  Minor storm           20/40/35
+  Moderate storm        05/30/20
+  Strong-Extreme storm  01/05/01
+  parsed Kp rows=8 max_forecast_Kp=5.00 storm_expected=YES
+
+  src: https://services.swpc.noaa.gov/text/3-day-forecast.txt
+  fetched_at(utc): 2026-10-29T22:56:26Z
+  The greatest observed 3 hr Kp over the past 24 hours was 2 (below NOAA Scale levels).
+  The greatest expected 3 hr Kp for Oct 29-Oct 31 2026 is 5.00 (NOAA Scale G1).
+
+  src: https://services.swpc.noaa.gov/text/27-day-outlook.txt
+  fetched_at(utc): 2026-10-29T22:56:26Z
+  :Issued: 2026 Oct 26 0118 UTC
+  2026 Oct 26      88           5          2
+
+  src: https://services.swpc.noaa.gov/text/discussion.txt
+  fetched_at(utc): 2026-10-29T22:56:26Z
+  Solar activity was at very low levels. Region 4563 (S19W76, Bxo/beta)
+  remained relatively stable and quiet.
+
+OK: 3-day forecast pipeline works (no key needed).
+
+######################################################################
+# DONKI catalogs (CCMC DONKI-API, no key): nasa_donki.py
+######################################################################
+DONKI broadcast 2026-10-22..2026-10-29 (https://ccmc.gsfc.nasa.gov/DONKI-API/get)
+  fetched_at(utc): 2026-10-29T22:56:26Z
+  CME: 27 event(s) | first=2026-10-22T20:12:00-CME-001 last=2026-10-29T10:36:00-CME-001
+  CMEAnalysis: 15 event(s) | first=? last=?
+  GST: 0 event(s)
+  IPS: 1 event(s) | first=2026-10-25T12:20:00-IPS-001 last=2026-10-25T12:20:00-IPS-001
+  FLR: 3 event(s) | first=? last=? | max class=C2.8
+  SEP: 0 event(s)
+  MPC: 0 event(s)
+  RBE: 2 event(s) | first=? last=?
+  HSS: 1 event(s) | first=? last=?
+  WSAEnlilSimulations: 14 event(s) | first=? last=?
+  notifications: 10 event(s) | first=20261022-AL-001 last=20261028-7D-001
+
+11/11 DONKI endpoints reachable at 2026-10-29T22:56:28Z.
+OK: DONKI pipeline works.
+
+######################################################################
+# BONUS solar-wind / GPS-threat feeds: solar_wind_extra.py
+######################################################################
+  fetched_at(utc): 2026-10-29T22:56:28Z
+  plasma latest: 2026-10-28T22:54:00 src=ACE V=388.83 km/s N=2.57/cc T=42965K
+  mag latest: 2026-10-28T22:55:00 src=IMAP Bt=4.78nT Bz_gsm=-0.27nT
+  spacecraft seen in last 60 samples: ['ACE', 'IMAP', 'SOLAR1']
+  summary speed: [{'proton_speed': 314, 'time_tag': '2026-10-29T22:48:00Z'}]
+  STEREO-A beacon latest: {'timestamp': '2026-10-29T22:31:00Z', 'speed_KPS': None, 'density_cm3': None, 'Bt_nT': 3.0464091}
+  propagated SW (last): ['2026-10-29T22:48:00Z', 314.0, 0.96, 48506.0, 4.07, -1.31, 0.85, 4.36, -313.0, -5.3, -24.5, '2026-10-29T23:58:00Z']
+  Enlil time series (keys/size): 1575402 chars
+
+  fetched_at(utc): 2026-10-29T22:56:42Z
+  GloTEC real-time TEC: index=4465 tiles latest=2026-10-29T22:25:00Z features=5184
+  Kyoto quicklook Dst (month tail): DST2610*31RRX020   09999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999
+  GFZ Kp nowcast (tail): 2026 10 29 21.0 22.50 34635.87500 34635.93750  0.000    0 0
+
+9/9 bonus feeds reachable. (OMNI/CDAWeb science archive needs US egress -> us_fetch_modal.py)
+
+======================================================================
+SUMMARY
+  [PASS] NOAA Kp-index (doc 1/3)
+  [PASS] NOAA Solar Flare reports (doc 2/3)
+  [PASS] NOAA 3-day geomag forecast (doc 3/3)
+  [PASS] DONKI catalogs (CCMC DONKI-API, no key)
+  [PASS] BONUS solar-wind / GPS-threat feeds

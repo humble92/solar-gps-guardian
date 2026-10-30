@@ -1,0 +1,8 @@
+Candidate,"GPS fidelity (25%)","Lead time (20%)","Location and route (15%)","Outage robustness (15%)","Simplicity (10%)","Cost and keys (10%)","Explainability (5%)","Weighted score",Verdict,Pros,Cons,Notes
+"P1 SWPC indices only",3,3,1,5,5,5,5,3.50,-,"Global coverage; no API key; stable baseline",No location specificity,
+"P2 P1 + GloTEC",4,2,5,3,3,5,5,3.65,-,"Location and route numbers; direct GPS link",Weak when TEC is missing,
+"P3 P1 + DONKI",3,5,1,2,3,4,4,3.10,-,"CME arrival forecast; advance warning",Blocked from Canada and needs a key,DONKI assumes a Modal US fetch
+"P4 Layered hybrid",5,5,5,5,2,4,5,4.60,"ADOPT. Fall back to P2 if the US path fails","Combines every candidate; mutual fallback",Largest implementation,Includes the Dst and GFZ cross-check
+"P5 LLM direct judgment",2,3,2,2,4,2,1,2.35,"REJECT. Numeric hallucination and cost",Natural-language quality,"Not auditable; per-call cost",Model-chosen numbers break the fixed-rule principle
+"P6 OMNI science-grade",5,1,1,2,2,3,5,2.65,Backtest only,Best quality for study,Delayed and blocked from Canada,Excluded from the live path
+Scale,,,,,,,,,,,,"1-5 (5 = best). Percents in the header are the weights. Study date 2026-10-26 (sandbox live tests)."

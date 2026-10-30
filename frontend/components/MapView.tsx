@@ -1,0 +1,60 @@
+"use client";
+import { useEffect, useRef } from "react";
+import "leaflet/dist/leaflet.css";
+
+// Self-contained pin: Leaflet's bundled marker-icon.png 404s under Next.js
+// (images in node_modules are not served), so the location marker is an
+// inline divIcon styled in globals.css (.sg-pin). No image assets needed.
+const PIN_SVG = (storm: boolean) =>
+  `<span class="sg-pin${storm ? " storm" : ""}"><span class="sg-pin-dot"></span></span>`;
+
+export default function MapView({ center, route, markers, storm }: {
+  center: [number, number];
+  route?: [number, number][];
+  markers?: { lat: number; lon: number; label: string }[];
+  storm?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<unknown>(null);
+  const layerRef = useRef<unknown>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const L = (await import("leaflet")) as any;
+      if (cancelled || !ref.current) return;
+      if (!mapRef.current) {
+        const map = L.map(ref.current).setView(center, 9);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+          { attribution: "© OpenStreetMap contributors" }).addTo(map);
+        layerRef.current = L.layerGroup().addTo(map);
+        mapRef.current = map;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const map = mapRef.current as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const layer = layerRef.current as any;
+      layer.clearLayers(); // never accumulate markers/routes across renders
+      map.setView(center, Math.max(map.getZoom(), 7));
+      (markers || []).forEach((m) =>
+        L.marker([m.lat, m.lon], {
+          icon: L.divIcon({ className: "", html: PIN_SVG(!!storm), iconSize: [26, 26], iconAnchor: [13, 13] }),
+          title: m.label,
+        }).addTo(layer).bindPopup(m.label));
+      if (route && route.length) {
+        L.polyline(route.map(([lon, lat]) => [lat, lon]),
+          { color: storm ? "#f87171" : "#f59e0b", weight: 4 }).addTo(layer);
+        map.fitBounds(route.map(([lon, lat]) => [lat, lon]));
+      }
+      if (storm) {
+        // Visible storm footprint so the simulate toggle changes the map too.
+        L.circle(center, { radius: 60000, color: "#f87171", weight: 2,
+          dashArray: "8 6", fillColor: "#f87171", fillOpacity: 0.08 }).addTo(layer);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [center, route, markers, storm]);
+
+  return <div ref={ref} style={{ height: 380, borderRadius: 12, overflow: "hidden" }} />;
+}

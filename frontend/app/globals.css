@@ -1,0 +1,46 @@
+:root {
+  --bg: #0b0f14; --panel: #121a22; --panel2: #18222d; --line: #243140;
+  --text: #e8eef4; --muted: #93a5b5; --amber: #f5a623; --teal: #2dd4bf;
+  --red: #f87171; --green: #4ade80;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: ui-sans-system, -apple-system, "Segoe UI", "Noto Sans", sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+.sub { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.card h3 { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.big { font-size: 30px; font-weight: 700; line-height: 1.1; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.badge.LOW { background: #123524; color: var(--green); }
+.badge.MODERATE { background: #3a2c07; color: var(--amber); }
+.badge.CRITICAL { background: #3d1414; color: var(--red); }
+.badge.degraded { background: #2a2438; color: #c4b5fd; }
+.badge.live { background: #0f2e2a; color: var(--teal); }
+section { margin-top: 22px; }
+section > h2 { font-size: 17px; margin: 0 0 10px; }
+input, button { font: inherit; }
+input { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 9px 11px; min-width: 180px; }
+button { background: var(--amber); color: #1a1206; border: 0; border-radius: 8px;
+  padding: 9px 16px; font-weight: 700; cursor: pointer; }
+button.ghost { background: transparent; color: var(--amber); border: 1px solid var(--amber); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.muted { color: var(--muted); font-size: 13px; }
+.err { color: var(--red); font-size: 13px; }
+.ok { color: var(--green); font-size: 13px; }
+.banner { border: 1px solid var(--line); border-left: 5px solid var(--amber);
+  background: var(--panel); border-radius: 6px; padding: 12px 14px; margin-bottom: 14px; }
+.banner.critical { border-left-color: var(--red); }
+.leaflet-container { background: #0e141b; }
+/* Self-drawn location pin (replaces Leaflet's marker-icon.png, which 404s
+   under Next.js bundling). Amber normally, red in storm simulation. */
+.sg-pin { display: block; width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(245, 166, 35, 0.25); border: 2px solid var(--amber);
+  position: relative; }
+.sg-pin-dot { position: absolute; inset: 7px; border-radius: 50%; background: var(--amber); }
+.sg-pin.storm { border-color: var(--red); background: rgba(248, 113, 113, 0.3); }
+.sg-pin.storm .sg-pin-dot { background: var(--red); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
