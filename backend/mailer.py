@@ -27,10 +27,17 @@ def verify(email, token):
     return hmac.compare_digest(sign(email), token or "")
 
 
-def digest_for(sub, snapshot):
+def digest_for(sub, snapshot, kind="daily"):
     r = risk_mod.assess(snapshot)
+    region = sub.get("region_name") or "your region"
+    if kind == "storm":
+        subject = "Solar wind Critical Alarm"
+        lead = f"Solar-GPS-Guardian critical alarm for {region}"
+    else:
+        subject = "Solar wind daily digest"
+        lead = f"Solar-GPS-Guardian daily digest for {region}"
     body = (
-        f"Solar-GPS-Guardian daily digest for {sub.get('region_name') or 'your region'}\n"
+        f"{lead}\n"
         f"Generated: {snapshot.get('fetched_at')}\n"
         f"GPS risk: {r['level']} ({r['score']}/100)\n"
         f"Kp now {snapshot.get('now', {}).get('kp')} | forecast max Kp "
@@ -43,17 +50,13 @@ def digest_for(sub, snapshot):
         body += "(Note: degraded mode - SWPC baseline only.)\n"
     tok = sign(sub["email"])
     body += (f"\nUnsubscribe: /unsubscribe?email={sub['email']}&token={tok}\n")
-    return "Solar wind daily digest", body
+    return subject, body
 
 
 def storm_triggered(snapshot):
+    """Extra mail only at CRITICAL. MODERATE, including a G1 forecast, waits for the daily digest."""
     r = risk_mod.assess(snapshot)
-    g = snapshot.get("now", {}).get("g_scale") or {}
-    try:
-        gnum = int(g.get("Scale") or 0)
-    except ValueError:
-        gnum = 0
-    return r["level"] in ("MODERATE", "CRITICAL") or gnum >= 1, r
+    return r["level"] == "CRITICAL", r
 
 
 def deliver(to, subject, body, dry_dir=None):
@@ -90,7 +93,7 @@ def run_batch(store, snapshot, kind="daily", dry_dir=None, force=False):
         email = sub["email"]
         if not force and store.already_sent(email, kind, event_key):
             continue
-        subject, body = digest_for(sub, snapshot)
+        subject, body = digest_for(sub, snapshot, kind=kind)
         paths.append(deliver(email, subject, body, dry_dir=dry_dir))
         store.log_sent(email, kind, event_key)
         sent += 1

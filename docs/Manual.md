@@ -1,7 +1,8 @@
 # User interface
 
-The site is one page. It shows the current GPS risk, a map, a route check,
-and an email subscription. There is no account and no login.
+The site has a dashboard and a monthly newsletter. The dashboard shows the
+current GPS risk, a map, a route check, and an email subscription. There is
+no account and no login. The header links Dashboard and Newsletters.
 
 The demo and simulated-storm screenshots were taken with `npm run dev` and
 `NEXT_PUBLIC_API_BASE=https://address`. That host does not exist, so the
@@ -77,6 +78,22 @@ If the API base is empty, the button does not call a server. The message is
 set and the host is down, the message is a fetch error, as in the
 screenshots.
 
-A stored subscription receives one daily digest and an extra message when
-the storm batch sees a raised level. Every message contains an unsubscribe
-link. The link is checked with `UNSUBSCRIBE_SECRET`.
+A stored subscription receives one daily digest, subject "Solar wind daily
+digest". An extra message, subject "Solar wind Critical Alarm", is sent only
+when a 6-hour check sees CRITICAL. MODERATE, including a G1 forecast, stays
+in the daily digest. Every message contains an unsubscribe link. The link is
+checked with `UNSUBSCRIBE_SECRET`.
+
+## Monthly newsletter
+
+![September 2026 newsletter from the template](images/ui-newsletter.png)
+
+Newsletters opens one issue. This capture is the September 2026 issue
+written by the template, which is used when the language-model call fails.
+The one-line take says the month is summarized by the numbers above.
+
+The summary line is max Kp 5.0, minimum Dst -48 nT, 108 CMEs, 13 flares,
+and 0 storms. Top events lists the first CME and flare rows. Next-month
+watch points tell the reader to follow the daily SWPC 3-day forecast. The
+bar chart is the daily maximum Kp from GFZ. The footer notes that OMNI was
+unavailable for this run, and that Kyoto values are provisional.

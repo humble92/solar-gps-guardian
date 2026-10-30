@@ -153,7 +153,7 @@ def daily_digest():
         _log_placement("daily_digest.end")
 
 
-@app.function(**_function_kwargs(timeout=300, schedule=modal.Period(hours=1)))
+@app.function(**_function_kwargs(timeout=300, schedule=modal.Period(hours=6)))
 def storm_watch():
     _log_placement("storm_watch.start")
     try:

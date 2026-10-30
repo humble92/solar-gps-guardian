@@ -163,7 +163,7 @@ come from the code:
 | Function | Schedule |
 |---|---|
 | `ingest_cron` | Every 15 minutes from the deploy time (`modal.Period`) |
-| `storm_watch` | Every hour from the deploy time (`modal.Period`) |
+| `storm_watch` | Every 6 hours from the deploy time (`modal.Period`). Sends only when the score is CRITICAL. |
 | `daily_digest` | 13:00 UTC every day (`modal.Cron`) |
 
 `modal.Period` schedules restart their clock on each deploy. `modal.Cron`

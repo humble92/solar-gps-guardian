@@ -1,4 +1,5 @@
 import tempfile
+import pathlib
 import unittest
 
 from backend import mailer
@@ -43,6 +44,20 @@ class TestStoreMailer(unittest.TestCase):
         self.store.subscribe("a@b.c", "Toronto", 43.7, -79.4)
         r = mailer.run_batch(self.store, QUIET, kind="storm", dry_dir=f"{self.tmp}/out")
         self.assertEqual(r["sent"], 0)
+
+    def test_storm_skips_moderate_and_sends_critical(self):
+        self.store.subscribe("a@b.c", "Toronto", 43.7, -79.4)
+        moderate = {**QUIET, "now": {"kp": 5.0, "g_scale": {"Scale": "1"}},
+                    "forecast_3d": {"max_kp": 5.0}}
+        critical = {**QUIET, "now": {"kp": 8.0, "g_scale": {"Scale": "3"}},
+                    "forecast_3d": {"max_kp": 8.0}}
+        r1 = mailer.run_batch(self.store, moderate, kind="storm", dry_dir=f"{self.tmp}/out")
+        r2 = mailer.run_batch(self.store, critical, kind="storm", dry_dir=f"{self.tmp}/out")
+        self.assertEqual(r1["sent"], 0)
+        self.assertEqual(r2["sent"], 1)
+        sent = list(pathlib.Path(f"{self.tmp}/out").glob("*.eml"))
+        self.assertEqual(len(sent), 1)
+        self.assertIn("Subject: Solar wind Critical Alarm", sent[0].read_text())
 
 
 if __name__ == "__main__":
