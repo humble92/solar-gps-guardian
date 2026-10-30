@@ -43,7 +43,11 @@ image = _with_backend(
     modal.Image.debian_slim(python_version="3.12").pip_install("fastapi[standard]")
 )
 vol = modal.Volume.from_name("guardian-data", create_if_missing=True)
-SECRETS = [modal.Secret.from_name("nasa-api"), modal.Secret.from_name("mail-smtp")]
+# NOTE: the "llm" secret must exist before `modal deploy` (create it even
+# with empty values if unused); newsletter writing skips providers whose
+# key+model are both unset.
+SECRETS = [modal.Secret.from_name("nasa-api"), modal.Secret.from_name("mail-smtp"),
+           modal.Secret.from_name("llm")]
 DB = "/data/guardian.db"
 
 

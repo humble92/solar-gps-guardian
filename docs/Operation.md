@@ -117,7 +117,22 @@ Create the Modal secrets before serve or deploy:
 ```bash
 modal secret create nasa-api NASA_API_KEY=...
 modal secret create mail-smtp SMTP_HOST=... SMTP_USER=... SMTP_PASS=... UNSUBSCRIBE_SECRET=...
+modal secret create llm BASETEN_API_KEY=... BASETEN_MODEL=... FIREWORKS_API_KEY=... FIREWORKS_MODEL=...
 ```
+
+The `llm` secret must exist before every deploy (use empty values if you
+have no keys yet — the code skips unset providers). Without it, newsletter
+issues are written by the template fallback and carry a `(template)` suffix
+in the title. After adding real keys and redeploying, regenerate the issue
+in place:
+
+```bash
+curl -X POST "$API/newsletters/generate" \
+  -H "Content-Type: application/json" -d '{"period":"2026-09"}'
+```
+
+The title suffix then becomes `(baseten)` or `(fireworks)` instead of
+`(template)`; the same row is overwritten, no duplicate.
 
 `modal serve` and `modal deploy` do not read the repository `.env`. Only
 those secrets are injected into containers.
