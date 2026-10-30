@@ -148,6 +148,9 @@ def render_chart_svg(pkg, width=720, height=240):
 _NUM = re.compile(r"\d+(?:\.\d+)?")
 
 
+_KEYNUM = re.compile(r"-?\d+(?:\.\d+)?")
+
+
 def package_numbers(pkg):
     nums = set()
 
@@ -157,7 +160,9 @@ def package_numbers(pkg):
         if isinstance(x, (int, float)):
             nums.add(round(float(x), 2))
         elif isinstance(x, dict):
-            for v in x.values():
+            for k, v in x.items():
+                # Thresholds live in key names (e.g. storm_days_dst_le_-50).
+                nums.update(abs(float(t)) for t in _KEYNUM.findall(str(k)))
                 walk(v)
         elif isinstance(x, (list, tuple)):
             for v in x:
@@ -211,38 +216,104 @@ def _template_draft(pkg):
     return "\n".join(lines)
 
 
-def write_draft(pkg):
+def compact_package(pkg):
+    """Small summary the model actually needs. The full package stays the
+    validation source of truth; a 31-day float array only burns reasoning
+    budget (finish=length with empty content)."""
+    g, k = pkg.get("gfz_kp") or {}, pkg.get("kyoto_dst") or {}
+    c = pkg.get("donki_counts") or {}
+    o = pkg.get("omni") or {}
+    return {
+        "period": pkg.get("period"),
+        "max_kp": g.get("max_kp"), "min_dst": k.get("min_dst"),
+        "storm_days_dst_le_-50": k.get("storm_days_dst_le_-50"),
+        "cmes": c.get("CME"), "flares": c.get("FLR"), "storms": c.get("GST"),
+        "top_events": (pkg.get("top_events") or [])[:6],
+        "omni_mean_speed_km_s": o.get("mean_speed_km_s"),
+        "omni_max_speed_km_s": o.get("max_speed_km_s"),
+        "notes": pkg.get("notes", []),
+    }
+
+
+def _post_chat(base, key, model, messages, max_tokens=6000):
+    body = json.dumps({"model": model, "messages": messages,
+                       "max_tokens": max_tokens}).encode()
+    req = urllib.request.Request(base.rstrip("/") + "/chat/completions",
+                                 data=body, headers={
+                                     "Authorization": f"Bearer {key}",
+                                     "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        resp = json.loads(r.read())
+    choice = (resp.get("choices") or [{}])[0]
+    return (choice.get("message") or {}).get("content"), choice.get("finish_reason")
+
+
+def write_draft(pkg, _attempts=None, _tries=3):
+    brief = compact_package(pkg)
     providers = [
         ("baseten", os.environ.get("BASETEN_API_BASE", "https://inference.baseten.co/v1"),
          os.environ.get("BASETEN_API_KEY"), os.environ.get("BASETEN_MODEL")),
         ("fireworks", os.environ.get("FIREWORKS_API_BASE", "https://api.fireworks.ai/inference/v1"),
          os.environ.get("FIREWORKS_API_KEY"), os.environ.get("FIREWORKS_MODEL")),
     ]
+    prompt = [
+        {"role": "system", "content":
+         "Write a SHORT monthly space-weather newsletter in markdown. "
+         "Use ONLY the numbers in the JSON package. Add at most a "
+         "one-line commentary per section (interpretation only, no "
+         "new numbers/events). Structure: headline, month summary, "
+         "top-events table, next-month watch points."},
+        {"role": "user", "content": json.dumps(brief)},
+    ]
     for name, base, key, model in providers:
         if not (key and model):
+            if _attempts is not None:
+                _attempts.append({name: "skipped: key and/or model env missing"})
             continue
+        md, finish = None, None
+        for t in range(max(1, _tries)):
+            # Reasoning length varies run to run; an empty finish=length
+            # reply is transient, so retry the identical prompt.
+            try:
+                md, finish = _post_chat(base, key, model, prompt)
+            except Exception as e:  # noqa: BLE001
+                if _attempts is not None:
+                    _attempts.append({name: f"error: {type(e).__name__}: {str(e)[:160]}"})
+                break
+            if isinstance(md, str) and md.strip():
+                break
+            if _attempts is not None:
+                _attempts.append({name: f"empty content (try {t + 1}, finish={finish})"})
+            md = None
         try:
-            body = json.dumps({
-                "model": model,
-                "messages": [
-                    {"role": "system", "content":
-                     "Write a SHORT monthly space-weather newsletter in markdown. "
-                     "Use ONLY the numbers in the JSON package. Add at most a "
-                     "one-line commentary per section (interpretation only, no "
-                     "new numbers/events). Structure: headline, month summary, "
-                     "top-events table, next-month watch points."},
-                    {"role": "user", "content": json.dumps(pkg)},
-                ],
-                "max_tokens": 700}).encode()
-            req = urllib.request.Request(base.rstrip("/") + "/chat/completions",
-                                         data=body, headers={
-                                             "Authorization": f"Bearer {key}",
-                                             "Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=60) as r:
-                md = json.loads(r.read())["choices"][0]["message"]["content"]
-            if not validate_draft(md, pkg):
+            if not isinstance(md, str) or not md.strip():
+                continue
+            bad = validate_draft(md, pkg)
+            if not bad:
+                if _attempts is not None:
+                    _attempts.append({name: "ok"})
                 return md, name
-        except Exception:  # noqa: BLE001
+            # One repair round: point at the offending numbers and retry.
+            repair_prompt = [
+                {"role": "system", "content":
+                 "Revise the newsletter draft below. Remove or replace "
+                 f"every number not in this list: {sorted(package_numbers(pkg))}. "
+                 "Keep the same structure and the one-line commentaries."},
+                {"role": "user", "content": md},
+            ]
+            try:
+                md2, _ = _post_chat(base, key, model, repair_prompt)
+                if isinstance(md2, str) and md2.strip() and not validate_draft(md2, pkg):
+                    if _attempts is not None:
+                        _attempts.append({name: "ok (after repair)"})
+                    return md2, name
+            except Exception:  # noqa: BLE001
+                pass
+            if _attempts is not None:
+                _attempts.append({name: f"draft failed number check: {bad[:6]}"})
+        except Exception as e:  # noqa: BLE001
+            if _attempts is not None:
+                _attempts.append({name: f"error: {type(e).__name__}: {str(e)[:160]}"})
             continue
     return _template_draft(pkg), "template"
 
@@ -256,9 +327,11 @@ def generate(store, period=None, today=None):
     else:
         w = last_complete_month(today)
     pkg = collect(w)
-    md, source = write_draft(pkg)
+    attempts = []
+    md, source = write_draft(pkg, _attempts=attempts)
     chart = render_chart_svg(pkg)
     title = f"Solar wind month in review: {w['period']} ({source})"
     nid = store.save_newsletter(w["period"], title, md, chart, pkg)
     return {"id": nid, "period": w["period"], "title": title,
-            "source": source, "sources_ok": pkg["sources"]}
+            "source": source, "sources_ok": pkg["sources"],
+            "llm_attempts": attempts}

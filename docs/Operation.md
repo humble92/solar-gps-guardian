@@ -203,6 +203,17 @@ non-US networks by design; `kyoto_dst`/`gfz_kp` work globally). The rows
 land in the `newsletters` table of `/data/guardian.db` on the Modal Volume,
 so they survive redeploys and appear under the site's `Newsletters` menu.
 
+### Still `(template)`? Checklist in order
+
+1. `modal secret create llm ...` was run (all four values).
+2. `modal deploy backend/app.py` was run **after** step 1.
+3. The issue was regenerated **after** step 2
+   (`POST /newsletters/generate` with that `period`) — old titles stay
+   `(template)` until overwritten.
+4. Read `llm_attempts` in the POST response: `skipped` means the env never
+   reached the container (steps 1-2); `error: ...` names the failing call
+   (wrong key/model, or a `*_API_BASE` override is needed).
+
 Pushing `main` runs `.github/workflows/modal-deploy.yml`, which executes
 `modal deploy backend/app.py`. The workflow does nothing until the two GitHub
 secrets exist. The `nasa-api` and `mail-smtp` secrets must already exist in

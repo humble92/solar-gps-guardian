@@ -166,7 +166,7 @@ def storm_watch():
         _log_placement("storm_watch.end")
 
 
-@app.function(**_function_kwargs(timeout=600, schedule=modal.Cron("5 0 1 * *")))
+@app.function(**_function_kwargs(timeout=1200, schedule=modal.Cron("5 0 1 * *")))
 def monthly_newsletter():
     _log_placement("monthly_newsletter.start")
     try:
