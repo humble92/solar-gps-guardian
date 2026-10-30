@@ -1,5 +1,7 @@
 # Solar-GPS-Guardian
 
+Live site: https://solar-gps-guardian.vercel.app/
+
 A public space-weather dashboard and email alert for GPS risk. The score is
 a fixed formula over open data. A language model may rewrite the sentence
 only when it repeats that score.
@@ -58,3 +60,7 @@ cd frontend && npm install && npm run dev
 
 Deploy and the Modal URL are in [Operation.md](docs/Operation.md). The design
 record is [implementation.md](docs/implementation.md).
+
+## Acknowledgements
+
+Thanks to Meta, Baseten, and Modal for the credits that made this project possible.
