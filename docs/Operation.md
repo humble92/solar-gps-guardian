@@ -154,8 +154,9 @@ terminal prints an HTTPS URL. Put that URL in `frontend/.env.local`:
 NEXT_PUBLIC_API_BASE=https://the-printed-host
 ```
 
-Restart `npm run dev`. The page then calls `GET /snapshot` and
-`POST /subscribe` on that cloud URL. Stopping `modal serve` removes the URL.
+Restart `npm run dev`. The page then calls `GET /snapshot`,
+`GET /local-score`, `POST /route-score`, and `POST /subscribe` on that
+cloud URL. Stopping `modal serve` removes the URL.
 
 `modal deploy backend/app.py` keeps the app `solar-gps-guardian`. Schedules
 come from the code:
@@ -163,7 +164,7 @@ come from the code:
 | Function | Schedule |
 |---|---|
 | `ingest_cron` | Every 15 minutes from the deploy time (`modal.Period`) |
-| `storm_watch` | Every 6 hours from the deploy time (`modal.Period`). Sends only when the score is CRITICAL. |
+| `storm_watch` | Every 6 hours from the deploy time (`modal.Period`). Sends only when that subscriber's local score is CRITICAL. |
 | `daily_digest` | 13:00 UTC every day (`modal.Cron`) |
 
 `modal.Period` schedules restart their clock on each deploy. `modal.Cron`

@@ -1,8 +1,9 @@
-"""GloTEC real-time TEC: index of tiles + latest tile summary (GPS-direct).
+"""GloTEC real-time TEC: index of tiles + latest tile (GPS-direct).
 
-Tiles are heavy (5k+ features); we summarize server-side (count + time) and
-offer nearest-cell lookup via tec_value_at() for location/route scoring.
-Empty index observed live -> tolerate (available=False, no crash).
+The tile is heavy (5k+ features). normalize() keeps a compact (lon, lat, tec)
+grid for the volume, plus tec_max for the public snapshot. Lookup is
+tec_value_at() / nearest_value(). Empty index observed live is tolerated
+(available=False, no crash).
 """
 from .base import ProviderError, frag, http_get_json
 
@@ -41,11 +42,16 @@ def _cells(tile):
     return cells
 
 
-def tec_value_at(tile, lon, lat):
-    cells = _cells(tile)
+def nearest_value(cells, lon, lat):
+    """Nearest cell in a list of (lon, lat, tec). None when the grid is missing."""
     if not cells:
         return None
-    return min(cells, key=lambda c: (c[0] - lon) ** 2 + (c[1] - lat) ** 2)[2]
+    best = min(cells, key=lambda c: (float(c[0]) - lon) ** 2 + (float(c[1]) - lat) ** 2)
+    return float(best[2])
+
+
+def tec_value_at(tile, lon, lat):
+    return nearest_value(_cells(tile), lon, lat)
 
 
 def normalize(raw):
@@ -57,4 +63,5 @@ def normalize(raw):
     return frag(available=True, tiles=len(idx),
                 latest_time=idx[-1].get("time_tag"),
                 cells=len(cells),
-                tec_max=max((c[2] for c in cells), default=None))
+                tec_max=max((c[2] for c in cells), default=None),
+                grid=[[c[0], c[1], c[2]] for c in cells])

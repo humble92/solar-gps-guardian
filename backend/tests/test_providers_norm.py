@@ -55,6 +55,18 @@ class TestProviderNormalize(unittest.TestCase):
         f = tec.normalize({"index": [], "tile": None})
         self.assertFalse(f["available"])
 
+    def test_tec_value_at_nearest_cell(self):
+        tile = {"features": [
+            {"geometry": {"type": "Point", "coordinates": [10.0, 0.0]},
+             "properties": {"tec": 12}},
+            {"geometry": {"type": "Point", "coordinates": [0.2, 0.2]},
+             "properties": {"tec": 70}},
+        ]}
+        f = tec.normalize({"index": [{"time_tag": "t", "url": "/x"}], "tile": tile})
+        self.assertEqual(f["tec_max"], 70)
+        self.assertEqual(f["grid"], [[10.0, 0.0, 12.0], [0.2, 0.2, 70.0]])
+        self.assertEqual(tec.tec_value_at(tile, 0.0, 0.0), 70)
+
 
 if __name__ == "__main__":
     unittest.main()

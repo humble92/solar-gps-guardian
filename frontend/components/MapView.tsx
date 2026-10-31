@@ -8,11 +8,18 @@ import "leaflet/dist/leaflet.css";
 const PIN_SVG = (storm: boolean) =>
   `<span class="sg-pin${storm ? " storm" : ""}"><span class="sg-pin-dot"></span></span>`;
 
-export default function MapView({ center, route, markers, storm }: {
+function lineColor(storm: boolean, level?: string) {
+  if (storm || level === "CRITICAL") return "#f87171";
+  if (level === "LOW") return "#2dd4bf";
+  return "#f59e0b";
+}
+
+export default function MapView({ center, route, markers, storm, routeLevel }: {
   center: [number, number];
   route?: [number, number][];
   markers?: { lat: number; lon: number; label: string }[];
   storm?: boolean;
+  routeLevel?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<unknown>(null);
@@ -44,7 +51,7 @@ export default function MapView({ center, route, markers, storm }: {
         }).addTo(layer).bindPopup(m.label));
       if (route && route.length) {
         L.polyline(route.map(([lon, lat]) => [lat, lon]),
-          { color: storm ? "#f87171" : "#f59e0b", weight: 4 }).addTo(layer);
+          { color: lineColor(!!storm, routeLevel), weight: 4 }).addTo(layer);
         map.fitBounds(route.map(([lon, lat]) => [lat, lon]));
       }
       if (storm) {
@@ -54,7 +61,7 @@ export default function MapView({ center, route, markers, storm }: {
       }
     })();
     return () => { cancelled = true; };
-  }, [center, route, markers, storm]);
+  }, [center, route, markers, storm, routeLevel]);
 
   return <div ref={ref} style={{ height: 380, borderRadius: 12, overflow: "hidden" }} />;
 }

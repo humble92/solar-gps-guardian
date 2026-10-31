@@ -20,7 +20,7 @@ def main():
 
     store = Store(args.db)
     snap = pipeline.run_pipeline()
-    store.save_snapshot(snap)
+    pipeline.persist(store, snap)
     result = llm.advisory(snap)
     print(json.dumps({"snapshot_at": snap["fetched_at"], "degraded": snap["degraded"],
                       "flags": snap["flags"], "risk": result}, indent=1)[:3000])

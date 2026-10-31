@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS subscriptions(
   active INTEGER DEFAULT 1, created_at REAL);
 CREATE TABLE IF NOT EXISTS telemetry_cache(
   id INTEGER PRIMARY KEY CHECK(id=1), snapshot TEXT, updated_at REAL);
+CREATE TABLE IF NOT EXISTS tec_grid(
+  id INTEGER PRIMARY KEY CHECK(id=1), cells TEXT, updated_at REAL);
 CREATE TABLE IF NOT EXISTS send_log(
   id INTEGER PRIMARY KEY, email TEXT, kind TEXT, event_key TEXT,
   sent_at REAL, UNIQUE(email, kind, event_key));
@@ -75,6 +77,18 @@ class Store:
         with self._conn() as c:
             row = c.execute("SELECT snapshot FROM telemetry_cache WHERE id=1").fetchone()
             return json.loads(row["snapshot"]) if row else None
+
+    def save_tec_grid(self, cells):
+        with self._lock, self._conn() as c:
+            c.execute("INSERT INTO tec_grid(id,cells,updated_at) VALUES(1,?,?)"
+                      " ON CONFLICT(id) DO UPDATE SET cells=excluded.cells,"
+                      " updated_at=excluded.updated_at",
+                      (json.dumps(cells), time.time()))
+
+    def load_tec_grid(self):
+        with self._conn() as c:
+            row = c.execute("SELECT cells FROM tec_grid WHERE id=1").fetchone()
+            return json.loads(row["cells"]) if row else []
 
     # send log ---------------------------------------------------------
     def already_sent(self, email, kind, event_key):

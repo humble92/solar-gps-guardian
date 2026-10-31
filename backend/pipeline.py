@@ -63,6 +63,10 @@ def build_snapshot(fragments, health, now=None):
     f3 = fragments.get("forecast_3d", {})
     donki = fragments.get("donki", {})
     tec = fragments.get("tec", {})
+    raw_grid = tec.get("grid") if isinstance(tec, dict) else None
+    grid = list(raw_grid) if isinstance(raw_grid, list) else []
+    if isinstance(tec, dict):
+        tec.pop("grid", None)
     snap = {
         "snapshot_version": SNAPSHOT_VERSION,
         "fetched_at": now or utcnow_iso(),
@@ -89,11 +93,27 @@ def build_snapshot(fragments, health, now=None):
             "cme_earth_arrivals": donki.get("earth_arrivals", []),
         },
         "tec": {"available": tec.get("available", tec.get("ok", False)),
-                "latest_time": tec.get("latest_time"), "tec_max": tec.get("tec_max")},
+                "latest_time": tec.get("latest_time"), "tec_max": tec.get("tec_max"),
+                "grid_ref": "tec_grid:1"},
+        "_tec_grid": grid,
         "dst": fragments.get("dst", {}), "kp_gfz": fragments.get("kp_gfz", {}),
         "stereo": fragments.get("stereo", {}), "enlil": fragments.get("enlil", {}),
         "health": health, "fragments": fragments,
     }
+    return snap
+
+
+def persist(store, snap):
+    """Save one planetary snapshot. A non-empty TEC grid is stored beside it.
+
+    An empty grid leaves the previous cells in place so a missed tile does
+    not wipe the last good lookup. The public snapshot keeps grid_ref, not
+    the cells.
+    """
+    grid = snap.pop("_tec_grid", None)
+    store.save_snapshot(snap)
+    if grid:
+        store.save_tec_grid(grid)
     return snap
 
 

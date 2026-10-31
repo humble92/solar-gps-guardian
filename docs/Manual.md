@@ -39,7 +39,7 @@ maximum of Kp 3.
 | DEMO DATA | No live snapshot. The page is using the built-in sample. |
 | LIVE | `GET /snapshot` returned a snapshot. |
 | DEGRADED MODE | DONKI or the TEC feed was missing. The SWPC numbers are still shown. |
-| SIMULATED STORM | The superstorm button is on. The numbers are not a measurement. |
+| SIMULATED STORM | The view is the superstorm card. The numbers are not a measurement. |
 
 The four cards are the current solar-wind sample, the 3-day forecast
 maximum Kp, the strongest flare in seven days, and the browser position.
@@ -51,21 +51,62 @@ The map is Leaflet on OpenStreetMap tiles, centered on that position. An amber p
 ## Route
 
 From and To are place names. Assess route asks Nominatim for coordinates and
-OSRM for a driving path, then draws the path and prints distance, duration,
-and the same risk score. Those two services are called from the browser.
-They do not go through the Python backend. If either call fails, the page
-keeps the score and says the routing call failed.
+OSRM for a driving path. Those two calls stay in the browser. The page draws
+the full path and prints distance and duration.
+
+The corridor score is not the banner score copied onto the line. The page
+keeps at most 8 vertices from the OSRM line. The first vertex and the last
+are always included. The other six are spaced evenly through the vertex
+list, so the gaps follow how many points OSRM returned, not kilometers
+along the road. A shorter line, one with 8 or fewer vertices, sends every
+vertex. Those points go to `POST /route-score`.
+
+Each sample uses the same score as the banner and the mail: nearest TEC
+cell, geomagnetic-latitude band on the Kp term only, and no flare bonus on
+the night side. Planetary Kp, the 3-day forecast, and any Earth-arrival CME
+are the same at every sample. What can differ along the road is TEC, the
+latitude band, and day or night. The server accepts at most 16 points. The
+page sends 8.
+
+The number in the sentence is the highest sample, not the average. A quiet
+stretch does not pull that number down. The same sentence prints the lowest
+and highest scores in the sample, and the advisory belongs to the highest
+point. The line color follows that highest level: red at CRITICAL, teal at
+LOW, amber otherwise.
+
+If Nominatim or OSRM fails, no path is drawn. The sentence names the
+failure and keeps the position score. If the path arrives and
+`/route-score` does not, the path stays on the map and the sentence says
+the local route score is unavailable. The superstorm step does not sample
+the path. It colors an existing line from the storm card. The next step,
+Simulate Route Risk, does sample the path.
 
 ## Simulated storm
 
 ![Simulated superstorm](images/ui-storm.png)
 
-Simulate solar superstorm replaces the snapshot with fixed storm numbers:
-Kp 8.3, forecast maximum Kp 9, an X4.2 flare, and an Earth-arrival CME.
-The banner becomes CRITICAL, 100/100, and the badge says SIMULATED STORM.
-The pin turns red, and a dashed circle is drawn around the position.
-Back to live restores the snapshot or the demo sample and removes that circle.
-This does not write the database and does not send mail.
+One button cycles through three views. The label is the next view.
+
+1. Live. The button reads Simulate solar superstorm. The banner is the
+   position score.
+2. Superstorm. The first click replaces the snapshot with fixed storm
+   numbers: Kp 8.3, forecast maximum Kp 9, an X4.2 flare, and an
+   Earth-arrival CME. The banner becomes CRITICAL, 100/100, and the badge
+   says SIMULATED STORM. The pin turns red, and a dashed circle is drawn
+   around the position. This step does not score route samples. The button
+   then reads Simulate Route Risk. The capture above is this card.
+3. Route risk. The next click returns the banner to the live position
+   score and scores the current From and To fields. Those fields start as
+   Toronto, ON and Hamilton, ON. The page draws that OSRM path, samples up
+   to 8 vertices, and posts them to `/route-score` with `scenario` set to
+   `storm`. The server scores those samples with the same superstorm
+   numbers (Kp 8.3, forecast maximum Kp 9, flare X4.2, one Earth-arrival
+   CME). The clock and the TEC grid stay live, so night side and local TEC
+   still change the sample. The line color and the sentence use the
+   highest of those hypothetical samples. The button then reads Back to Live.
+4. The next click clears that path and returns to the live view.
+
+None of these steps writes the database or sends mail.
 
 ## Subscribe
 

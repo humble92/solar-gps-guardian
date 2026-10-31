@@ -18,6 +18,14 @@ export type Risk = {
   inputs?: Record<string, unknown>;
 };
 
+export type RoutePoint = { lat: number; lon: number; label?: string };
+
+export type RouteSegment = RoutePoint & {
+  tec: number | null; score: number; level: Risk["level"]; advisory?: string;
+};
+
+export type RouteScore = { segments: RouteSegment[]; worst: RouteSegment | null };
+
 const API = process.env.NEXT_PUBLIC_API_BASE || "";
 
 /** Demo snapshot used when no backend is configured (clearly labeled in UI). */
@@ -30,15 +38,63 @@ export const DEMO_SNAPSHOT: Snapshot = {
   tec: { available: false },
 };
 
-export function scoreSnapshot(s: Snapshot): Risk {
-  const kp = Math.max(s.now.kp ?? 0, s.forecast_3d.max_kp ?? 0);
-  let score = kp * 10;
-  const w = s.events.worst_flare_7d || "";
-  if (w.startsWith("X")) score += 25; else if (w.startsWith("M")) score += 15;
-  if ((s.events.cme_earth_arrivals || []).length) score += 20;
-  score = Math.min(100, Math.round(score));
-  const level = score >= 70 ? "CRITICAL" : score >= 40 ? "MODERATE" : "LOW";
-  return { score, level, advisory: `GPS risk ${level} (${score}/100). Kp now ${s.now.kp}, forecast max ${s.forecast_3d.max_kp}.`, advisory_source: API ? "api" : "demo-local" };
+/** Fixed label for the canned demo snapshot above. Live scores come from /local-score. */
+export const DEMO_RISK: Risk = {
+  score: 30, level: "LOW", advisory_source: "demo",
+  advisory: "GPS risk LOW (30/100). Demo snapshot (planetary Kp 2, forecast max 3). Set NEXT_PUBLIC_API_BASE for a local score.",
+};
+
+/** Fixed label for the simulate toggle. The server does not see this card. */
+export const SIM_RISK: Risk = {
+  score: 100, level: "CRITICAL", advisory_source: "simulated",
+  advisory: "GPS risk CRITICAL (100/100). Simulated superstorm: planetary Kp 8.3, forecast max 9, flare X4.2, Earth-arrival CME. This card is not a local score.",
+};
+
+function asRisk(j: unknown): Risk | null {
+  if (!j || typeof j !== "object") return null;
+  const o = j as Risk;
+  if (typeof o.score !== "number" || (o.level !== "LOW" && o.level !== "MODERATE" && o.level !== "CRITICAL")) {
+    return null;
+  }
+  return o;
+}
+
+export async function fetchLocalScore(lat: number, lon: number): Promise<Risk | null> {
+  if (!API) return null;
+  const r = await fetch(`${API}/local-score?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`);
+  if (!r.ok) return null;
+  return asRisk(await r.json());
+}
+
+export async function fetchPlanetaryRisk(): Promise<Risk | null> {
+  if (!API) return null;
+  const r = await fetch(`${API}/risk`);
+  if (!r.ok) return null;
+  return asRisk(await r.json());
+}
+
+export function sampleRoute(coords: [number, number][], n = 8): RoutePoint[] {
+  if (!coords.length) return [];
+  const count = Math.min(n, coords.length);
+  const out: RoutePoint[] = [];
+  for (let i = 0; i < count; i++) {
+    const idx = count === 1 ? 0 : Math.round((i * (coords.length - 1)) / (count - 1));
+    const [lon, lat] = coords[idx];
+    out.push({ lat, lon, label: `s${i}` });
+  }
+  return out;
+}
+
+export async function fetchRouteScore(points: RoutePoint[], scenario?: "storm"): Promise<RouteScore | null> {
+  if (!API) return null;
+  const r = await fetch(`${API}/route-score`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(scenario ? { points, scenario } : { points }),
+  });
+  if (!r.ok) return null;
+  const j = await r.json();
+  if (!j || !Array.isArray(j.segments)) return null;
+  return j as RouteScore;
 }
 
 export async function fetchSnapshot(): Promise<{ snap: Snapshot; live: boolean }> {

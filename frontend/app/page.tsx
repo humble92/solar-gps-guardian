@@ -1,12 +1,15 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  DEMO_SNAPSHOT, fetchSnapshot, geocode, osrmRoute, reverseGeocode, scoreSnapshot, subscribe,
+  DEMO_RISK, DEMO_SNAPSHOT, SIM_RISK, fetchLocalScore, fetchPlanetaryRisk, fetchRouteScore,
+  fetchSnapshot, geocode, osrmRoute, reverseGeocode, sampleRoute, subscribe,
   type Risk, type Snapshot,
 } from "@/lib/api";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
+
+type ViewMode = "live" | "storm" | "route";
 
 const SIM_STORM: Snapshot = {
   ...DEMO_SNAPSHOT, degraded: false,
@@ -20,7 +23,8 @@ const SIM_STORM: Snapshot = {
 export default function Home() {
   const [snap, setSnap] = useState<Snapshot>(DEMO_SNAPSHOT);
   const [live, setLive] = useState(false);
-  const [sim, setSim] = useState(false);
+  const [mode, setMode] = useState<ViewMode>("live");
+  const [busy, setBusy] = useState(false);
   const [loc, setLoc] = useState<[number, number]>([43.65, -79.38]);
   const [locName, setLocName] = useState("Toronto (default)");
   const [from, setFrom] = useState("Toronto, ON");
@@ -31,13 +35,15 @@ export default function Home() {
   const [region, setRegion] = useState("Toronto, ON");
   const [subMsg, setSubMsg] = useState("");
   const [err, setErr] = useState("");
+  const [ready, setReady] = useState(false);
+  const [risk, setRisk] = useState<Risk | null>(null);
+  const [routeLevel, setRouteLevel] = useState<string | undefined>();
 
-  const shown = sim ? SIM_STORM : snap;
-  const risk: Risk = useMemo(() => scoreSnapshot(shown), [shown]);
+  const shown = mode === "storm" ? SIM_STORM : snap;
 
   useEffect(() => {
-    fetchSnapshot().then(({ snap, live }) => { setSnap(snap); setLive(live); })
-      .catch((e) => setErr(String(e)));
+    fetchSnapshot().then(({ snap, live }) => { setSnap(snap); setLive(live); setReady(true); })
+      .catch((e) => { setErr(String(e)); setReady(true); });
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (p) => {
@@ -53,22 +59,91 @@ export default function Home() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!ready) return;
+    if (mode === "storm") { setRisk(SIM_RISK); return; }
+    if (!live) { setRisk(DEMO_RISK); return; }
+    let cancel = false;
+    fetchLocalScore(loc[0], loc[1])
+      .then(async (local) => {
+        if (cancel) return;
+        if (local) { setRisk(local); return; }
+        const planetary = await fetchPlanetaryRisk();
+        if (!cancel) setRisk(planetary);
+      })
+      .catch(() => { if (!cancel) setRisk(null); });
+    return () => { cancel = true; };
+  }, [ready, live, mode, loc, snap.fetched_at]);
+
+  async function drawScoredRoute(prefix: string, stormCard: boolean, scenario?: "storm") {
+    setRouteInfo(prefix + "Routing...");
+    const a = await geocode(from); const b = await geocode(to);
+    if (!a || !b) throw new Error("Place not found (Nominatim)");
+    const r = await osrmRoute(a, b);
+    setRoute(r.coords);
+    const head = prefix + `${a.name.split(",")[0]} -> ${b.name.split(",")[0]}: ` +
+      `${r.distanceKm.toFixed(1)} km, ~${Math.round(r.durationMin)} min. `;
+    if (stormCard) {
+      setRouteLevel("CRITICAL");
+      setRouteInfo(head + "Simulation uses the storm card, not a sampled corridor.");
+      return;
+    }
+    const scored = await fetchRouteScore(sampleRoute(r.coords), scenario);
+    if (!scored || !scored.worst) {
+      setRouteLevel(undefined);
+      setRouteInfo(head + "Local route score unavailable.");
+      return;
+    }
+    const scores = scored.segments.map((s) => s.score);
+    const lo = Math.min(...scores);
+    const hi = Math.max(...scores);
+    const hypo = scenario === "storm"
+      ? "Hypothetical superstorm on this corridor (Kp 9, flare X4.2, Earth-arrival CME). "
+      : "";
+    setRouteLevel(scored.worst.level);
+    setRouteInfo(head + hypo +
+      `GPS risk along corridor: ${scored.worst.level} (${scored.worst.score}/100), ` +
+      `sampled ${scored.segments.length} points (${lo}-${hi}). ${scored.worst.advisory || ""}`);
+  }
+
   async function planRoute() {
-    setErr(""); setRouteInfo("Routing...");
+    setErr("");
     try {
-      const a = await geocode(from); const b = await geocode(to);
-      if (!a || !b) throw new Error("Place not found (Nominatim)");
-      const r = await osrmRoute(a, b);
-      setRoute(r.coords);
-      const seg = scoreSnapshot(shown);
-      setRouteInfo(`${a.name.split(",")[0]} -> ${b.name.split(",")[0]}: ` +
-        `${r.distanceKm.toFixed(1)} km, ~${Math.round(r.durationMin)} min. ` +
-        `GPS risk along corridor: ${seg.level} (${seg.score}/100). ${seg.advisory}`);
+      await drawScoredRoute("", mode === "storm");
     } catch (e) {
       setRoute(undefined);
-      setRouteInfo(`Routing failed (${String(e)}). Straight-line corridor fallback: ` +
-        `risk ${risk.level} (${risk.score}/100).`);
+      setRouteLevel(undefined);
+      const banner = risk ? `${risk.level} (${risk.score}/100)` : "unavailable";
+      setRouteInfo(`Routing failed (${String(e)}). No corridor samples. Position score: ${banner}.`);
     }
+  }
+
+  async function cycleView() {
+    if (busy) return;
+    if (mode === "live") {
+      setMode("storm");
+      return;
+    }
+    if (mode === "storm") {
+      setMode("route");
+      setBusy(true);
+      setErr("");
+      try {
+        await drawScoredRoute("Route risk simulation. ", false, "storm");
+      } catch (e) {
+        setRoute(undefined);
+        setRouteLevel(undefined);
+        const banner = risk ? `${risk.level} (${risk.score}/100)` : "unavailable";
+        setRouteInfo(`Routing failed (${String(e)}). No corridor samples. Position score: ${banner}.`);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    setMode("live");
+    setRoute(undefined);
+    setRouteInfo("");
+    setRouteLevel(undefined);
   }
 
   async function doSubscribe() {
@@ -79,7 +154,7 @@ export default function Home() {
       const res = await subscribe(email, lat, lon, region) as { demo?: boolean; id?: number };
       setSubMsg(res.demo
         ? "Demo mode: no backend configured, subscription NOT stored. Set NEXT_PUBLIC_API_BASE."
-        : `Subscribed (id ${res.id}). Daily digest + storm alerts enabled.`);
+        : `Subscribed (id ${res.id}). Daily digest and critical alarms use this region's local score.`);
     } catch (e) { setSubMsg(`Subscribe failed: ${String(e)}`); }
   }
 
@@ -88,11 +163,13 @@ export default function Home() {
       <h1>Solar-GPS-Guardian</h1>
       <div className="sub">Space-weather GPS hazard shield - live where configured, degraded-safe otherwise.</div>
 
-      <div className={`banner ${risk.level === "CRITICAL" ? "critical" : ""}`}>
-        <span className={`badge ${risk.level}`}>{risk.level}</span>{" "}
-        <strong>{risk.score}/100</strong> - {risk.advisory}{" "}
-        <span className={`badge ${live ? "live" : "degraded"}`}>{sim ? "SIMULATED STORM" : live ? "LIVE" : "DEMO DATA"}</span>{" "}
-        {shown.degraded && !sim && <span className="badge degraded">DEGRADED MODE</span>}
+      <div className={`banner ${risk?.level === "CRITICAL" ? "critical" : ""}`}>
+        {risk ? (<>
+          <span className={`badge ${risk.level}`}>{risk.level}</span>{" "}
+          <strong>{risk.score}/100</strong> - {risk.advisory}{" "}
+        </>) : <span>Scoring this position...</span>}{" "}
+        <span className={`badge ${live ? "live" : "degraded"}`}>{mode === "storm" ? "SIMULATED STORM" : live ? "LIVE" : "DEMO DATA"}</span>{" "}
+        {shown.degraded && mode !== "storm" && <span className="badge degraded">DEGRADED MODE</span>}
       </div>
 
       <div className="grid">
@@ -107,12 +184,17 @@ export default function Home() {
           <div className="muted">M/X flares: {shown.events.mx_flares_7d ?? 0}</div></div>
         <div className="card"><h3>Your position</h3>
           <div className="big" style={{ fontSize: 20 }}>{locName}</div>
-          <div className="muted">{loc[0].toFixed(3)}, {loc[1].toFixed(3)} - TEC feed {shown.tec.available ? "available" : "unavailable"}</div></div>
+          <div className="muted">{loc[0].toFixed(3)}, {loc[1].toFixed(3)}
+            {risk?.inputs?.tec_local != null
+              ? ` - local TEC ${Number(risk.inputs.tec_local).toFixed(0)} TECU`
+              : ` - TEC feed ${shown.tec.available ? "available" : "unavailable"}`}
+            {risk?.inputs?.kp_band ? ` - ${String(risk.inputs.kp_band)} geomagnetic latitude` : ""}
+          </div></div>
       </div>
 
       <section>
         <h2>Map</h2>
-        <MapView center={loc} route={route} storm={sim}
+        <MapView center={loc} route={route} storm={mode === "storm"} routeLevel={routeLevel}
           markers={[{ lat: loc[0], lon: loc[1], label: locName }]} />
       </section>
 
@@ -122,8 +204,10 @@ export default function Home() {
           <input value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From" />
           <input value={to} onChange={(e) => setTo(e.target.value)} aria-label="To" />
           <button onClick={planRoute}>Assess route</button>
-          <button className="ghost" onClick={() => setSim(!sim)}>
-            {sim ? "Back to live" : "Simulate solar superstorm"}</button>
+          <button className="ghost" onClick={cycleView} disabled={busy}>
+            {mode === "live" ? "Simulate solar superstorm"
+              : mode === "storm" ? "Simulate Route Risk"
+              : "Back to Live"}</button>
         </div>
         {routeInfo && <p className="muted">{routeInfo}</p>}
       </section>
@@ -137,7 +221,7 @@ export default function Home() {
           <button onClick={doSubscribe}>Subscribe</button>
         </div>
         {subMsg && <p className={subMsg.includes("NOT") || subMsg.includes("failed") ? "err" : "ok"}>{subMsg}</p>}
-        <p className="muted">Daily digest + extra sends on G/R storm triggers. Unsubscribe link in every mail.</p>
+        <p className="muted">Daily digest at 13:00 UTC, plus a critical alarm when the score at this region reaches CRITICAL. Both use that region's local score. Unsubscribe link in every mail.</p>
       </section>
 
       {err && <p className="err">{err}</p>}

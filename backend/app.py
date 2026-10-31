@@ -100,6 +100,21 @@ def _run_pipeline():
     return pipeline.run_pipeline(fetchers={pid: _remote(pid) for pid in US_PROVIDERS})
 
 
+def _view_snapshot():
+    """Planetary snapshot plus the TEC grid. A cache miss does not write the row."""
+    store = _store()
+    snap = store.load_snapshot()
+    grid = store.load_tec_grid()
+    if not snap:
+        snap = _run_pipeline()
+        fresh = snap.pop("_tec_grid", None)
+        if fresh:
+            grid = fresh
+    elif isinstance(snap, dict):
+        snap.pop("_tec_grid", None)
+    return snap, grid or []
+
+
 # Stdlib-only image: this container exists just long enough to call DONKI.
 _us_image = _with_backend(modal.Image.debian_slim(python_version="3.12"))
 
@@ -122,8 +137,9 @@ def fetch_us_provider(pid: str, env=None):
 def ingest_once():
     _log_placement("ingest_once.start")
     try:
+        from backend import pipeline
         snap = _run_pipeline()
-        _store().save_snapshot(snap)
+        pipeline.persist(_store(), snap)
         vol.commit()
         return {"fetched_at": snap["fetched_at"], "degraded": snap["degraded"],
                 "flags": snap["flags"]}
@@ -185,7 +201,7 @@ def api():
 
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
-    from backend import llm, mailer, pipeline, risk
+    from backend import llm, local_score, mailer, pipeline
 
     _log_placement("api.build.start")
 
@@ -209,11 +225,36 @@ def api():
 
     @web.get("/snapshot")
     def snapshot():
-        return _store().load_snapshot() or _run_pipeline()
+        snap, _grid = _view_snapshot()
+        return snap
+
+    @web.get("/local-score")
+    def local_score_ep(lat: float, lon: float):
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            return {"error": "lat/lon out of range"}
+        snap, grid = _view_snapshot()
+        return local_score.score_point(snap, lat, lon, grid)
+
+    @web.post("/route-score")
+    def route_score_ep(body: dict):
+        clean = []
+        for p in (body.get("points") or [])[:16]:
+            try:
+                lat, lon = float(p["lat"]), float(p["lon"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if -90 <= lat <= 90 and -180 <= lon <= 180:
+                clean.append({"lat": lat, "lon": lon, "label": str(p.get("label") or len(clean))})
+        snap, grid = _view_snapshot()
+        scenario = body.get("scenario")
+        if scenario not in (None, "", "storm"):
+            scenario = None
+        return local_score.score_route(snap, clean, grid, scenario=scenario or None)
 
     @web.get("/risk")
     def risk_ep():
-        return llm.advisory(snapshot())
+        snap, _grid = _view_snapshot()
+        return llm.advisory(snap)
 
     @web.get("/health")
     def health():

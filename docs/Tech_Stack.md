@@ -11,9 +11,9 @@ host.
 |---|---|
 | Next.js 15, React 19, TypeScript | Single page on Vercel, or `npm run dev` locally. |
 | Leaflet and OpenStreetMap | Map tiles and the position marker. |
-| Nominatim and the public OSRM server | Place lookup and driving geometry. Called by the browser. |
-| Modal | 15-minute ingest, hourly storm check, daily digest, and the HTTP API. |
-| SQLite on a Modal Volume | One subscriptions table, one snapshot row, one send log. Locally the file is `data/guardian.db`. |
+| Nominatim and the public OSRM server | Place lookup and driving geometry. Called by the browser. The score of that path is `POST /route-score` on the Python API. |
+| Modal | 15-minute ingest, 6-hour critical check, daily digest, and the HTTP API. |
+| SQLite on a Modal Volume | Subscriptions, one snapshot row, one TEC grid row, one send log. Locally the file is `data/guardian.db`. |
 | Baseten, then Fireworks | Optional prose + monthly newsletter writing. If both are absent or the echoed score does not match, the template sentence from `risk.py` is used. |
 | SMTP | Real mail only from the deployed batch. Local `--batch` writes `data/outbox/*.eml`. |
 
@@ -75,9 +75,24 @@ The total is clamped to 0..100. Under 40 is LOW, under 70 is MODERATE, 70
 and above is CRITICAL. Missing inputs score 0, LOW. Solar-wind speed and Bz
 are stored for the sentence and are not part of the sum.
 
-The browser repeats the same Kp, flare, and CME terms in
-`frontend/lib/api.ts`. It does not call `GET /risk`. The email body uses the
-Python template, not the LLM paragraph.
+After that sum, location changes three things. The Kp term is multiplied by
+a geomagnetic-latitude band: 1.0 at 55 degrees and above, 0.8 from 30 up to
+55, and 0.6 below 30. The pole used for that band is 80.6 N, 72.6 W. Local
+solar time comes from longitude and `fetched_at`. Outside 06:00 to 18:00 the
+flare points are omitted. The TEC points apply only when a cell is available
+and the value is at least 50 TECU.
+
+The page does not recompute those weights. The banner calls
+`GET /local-score`. A route calls `POST /route-score` with up to 8 samples
+of the OSRM line, including the start and the end, spaced through the
+vertex list. The corridor score is the highest sample. See `Manual.md` for
+what the sentence and the line color show. Demo mode and the superstorm
+step use fixed labels because those cards are not on the server. The
+route-risk step of the same button sends `scenario=storm`, so those
+samples use the superstorm numbers with the live clock and TEC grid. The
+banner stays the live position score. The
+email body uses the same Python score for the subscriber coordinates, not
+the LLM paragraph.
 
 When an LLM is configured, it receives the finished score and must end with
 `SCORE: <that number>`. Any other number is discarded and the template

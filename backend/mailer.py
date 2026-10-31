@@ -13,6 +13,7 @@ import time
 from email.message import EmailMessage
 
 from . import risk as risk_mod
+from .local_score import score_point
 
 
 def _secret():
@@ -27,8 +28,14 @@ def verify(email, token):
     return hmac.compare_digest(sign(email), token or "")
 
 
-def digest_for(sub, snapshot, kind="daily"):
-    r = risk_mod.assess(snapshot)
+def digest_for(sub, snapshot, kind="daily", scored=None):
+    if scored is None:
+        lat, lon = sub.get("lat"), sub.get("lon")
+        if lat is None or lon is None:
+            scored = risk_mod.assess(snapshot)
+        else:
+            scored = risk_mod.assess(snapshot, lat=lat, lon=lon)
+    r = scored
     region = sub.get("region_name") or "your region"
     if kind == "storm":
         subject = "Solar wind Critical Alarm"
@@ -36,6 +43,9 @@ def digest_for(sub, snapshot, kind="daily"):
     else:
         subject = "Solar wind daily digest"
         lead = f"Solar-GPS-Guardian daily digest for {region}"
+    where = ""
+    if sub.get("lat") is not None and sub.get("lon") is not None:
+        where = f"Scored for {float(sub['lat']):.2f}, {float(sub['lon']):.2f}.\n"
     body = (
         f"{lead}\n"
         f"Generated: {snapshot.get('fetched_at')}\n"
@@ -45,6 +55,7 @@ def digest_for(sub, snapshot, kind="daily"):
         f"{snapshot.get('now', {}).get('sw_speed')} km/s, Bz "
         f"{snapshot.get('now', {}).get('bz_gsm')} nT\n"
         f"{r['advisory']}\n"
+        f"{where}"
     )
     if snapshot.get("degraded"):
         body += "(Note: degraded mode - SWPC baseline only.)\n"
@@ -54,7 +65,11 @@ def digest_for(sub, snapshot, kind="daily"):
 
 
 def storm_triggered(snapshot):
-    """Extra mail only at CRITICAL. MODERATE, including a G1 forecast, waits for the daily digest."""
+    """Planetary CRITICAL check with no viewer location.
+
+    The mail batch does not use this. Extra mail goes out only when that
+    subscriber's local score is CRITICAL.
+    """
     r = risk_mod.assess(snapshot)
     return r["level"] == "CRITICAL", r
 
@@ -79,22 +94,32 @@ def deliver(to, subject, body, dry_dir=None):
     return "smtp"
 
 
+def _score_sub(sub, snapshot, grid):
+    lat, lon = sub.get("lat"), sub.get("lon")
+    if lat is None or lon is None:
+        return risk_mod.assess(snapshot)
+    return score_point(snapshot, lat, lon, grid)
+
+
 def run_batch(store, snapshot, kind="daily", dry_dir=None, force=False):
-    """kind: 'daily' (all subscribers) or 'storm' (only when triggered)."""
+    """kind: 'daily' (everyone) or 'storm' (only subscribers whose local score is CRITICAL)."""
+    grid = store.load_tec_grid()
     if kind == "storm":
-        trig, r = storm_triggered(snapshot)
-        if not trig and not force:
-            return {"sent": 0, "skipped": "not triggered", "level": r["level"]}
-        event_key = f"{snapshot.get('fetched_at', '')[:13]}-{r['level']}"
+        event_key = f"{snapshot.get('fetched_at', '')[:13]}-CRITICAL"
     else:
         event_key = snapshot.get("fetched_at", "")[:10]
     sent, paths = 0, []
     for sub in store.list_active():
+        scored = _score_sub(sub, snapshot, grid)
+        if kind == "storm" and scored["level"] != "CRITICAL" and not force:
+            continue
         email = sub["email"]
         if not force and store.already_sent(email, kind, event_key):
             continue
-        subject, body = digest_for(sub, snapshot, kind=kind)
+        subject, body = digest_for(sub, snapshot, kind=kind, scored=scored)
         paths.append(deliver(email, subject, body, dry_dir=dry_dir))
         store.log_sent(email, kind, event_key)
         sent += 1
+    if kind == "storm" and sent == 0:
+        return {"sent": 0, "skipped": "not triggered", "level": "below CRITICAL", "out": paths}
     return {"sent": sent, "event_key": event_key, "out": paths}

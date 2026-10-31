@@ -37,6 +37,11 @@ Earth-arrival CME is listed, and 10 if a supplied local TEC value is at
 least 50 TECU. Under 40 is LOW, under 70 is MODERATE, and 70 or more is
 CRITICAL. The model does not calculate these numbers.
 
+On the live view, the banner, each sample along a driving route, and each
+subscriber's mail use this formula at that place: local TEC, a
+geomagnetic-latitude weight on the Kp term, and no flare bonus on the night
+side. To see how that route looks in a crisis, press the Simulate toggle.
+
 If DONKI or the TEC feed is missing, the snapshot is marked degraded and the
 SWPC readings still drive the score and the mail batch.
 
