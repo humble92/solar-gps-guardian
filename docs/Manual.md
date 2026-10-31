@@ -92,8 +92,11 @@ One button cycles through three views. The label is the next view.
 2. Superstorm. The first click replaces the snapshot with fixed storm
    numbers: Kp 8.3, forecast maximum Kp 9, an X4.2 flare, and an
    Earth-arrival CME. The banner becomes CRITICAL, 100/100, and the badge
-   says SIMULATED STORM. The pin turns red, and a dashed circle is drawn
-   around the position. This step does not score route samples. The button
+   says SIMULATED STORM. The map center and zoom return to the Toronto
+   region (zoom 9), From and To reset to Toronto, ON and Hamilton, ON, and
+   any path already on the map is cleared. The pin turns red, and a dashed
+   circle is drawn around Toronto. This step does not score route samples.
+   The button
    then reads Simulate Route Risk. The capture above is this card.
 3. Route risk. The next click returns the banner to the live position
    score and scores the current From and To fields. Those fields start as

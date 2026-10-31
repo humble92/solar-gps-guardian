@@ -11,6 +11,9 @@ const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 
 type ViewMode = "live" | "storm" | "route";
 
+const TORONTO: [number, number] = [43.65, -79.38];
+const TORONTO_ZOOM = 9;
+
 const SIM_STORM: Snapshot = {
   ...DEMO_SNAPSHOT, degraded: false,
   flags: { donki_available: true, tec_available: true, stale_sources: [] },
@@ -25,7 +28,7 @@ export default function Home() {
   const [live, setLive] = useState(false);
   const [mode, setMode] = useState<ViewMode>("live");
   const [busy, setBusy] = useState(false);
-  const [loc, setLoc] = useState<[number, number]>([43.65, -79.38]);
+  const [loc, setLoc] = useState<[number, number]>(TORONTO);
   const [locName, setLocName] = useState("Toronto (default)");
   const [from, setFrom] = useState("Toronto, ON");
   const [to, setTo] = useState("Hamilton, ON");
@@ -121,6 +124,13 @@ export default function Home() {
   async function cycleView() {
     if (busy) return;
     if (mode === "live") {
+      setLoc(TORONTO);
+      setLocName("Toronto");
+      setFrom("Toronto, ON");
+      setTo("Hamilton, ON");
+      setRoute(undefined);
+      setRouteInfo("");
+      setRouteLevel(undefined);
       setMode("storm");
       return;
     }
@@ -195,6 +205,7 @@ export default function Home() {
       <section>
         <h2>Map</h2>
         <MapView center={loc} route={route} storm={mode === "storm"} routeLevel={routeLevel}
+          zoom={mode === "storm" ? TORONTO_ZOOM : undefined}
           markers={[{ lat: loc[0], lon: loc[1], label: locName }]} />
       </section>
 

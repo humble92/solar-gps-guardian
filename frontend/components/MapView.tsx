@@ -14,12 +14,13 @@ function lineColor(storm: boolean, level?: string) {
   return "#f59e0b";
 }
 
-export default function MapView({ center, route, markers, storm, routeLevel }: {
+export default function MapView({ center, route, markers, storm, routeLevel, zoom }: {
   center: [number, number];
   route?: [number, number][];
   markers?: { lat: number; lon: number; label: string }[];
   storm?: boolean;
   routeLevel?: string;
+  zoom?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<unknown>(null);
@@ -43,16 +44,17 @@ export default function MapView({ center, route, markers, storm, routeLevel }: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const layer = layerRef.current as any;
       layer.clearLayers(); // never accumulate markers/routes across renders
-      map.setView(center, Math.max(map.getZoom(), 7));
       (markers || []).forEach((m) =>
         L.marker([m.lat, m.lon], {
           icon: L.divIcon({ className: "", html: PIN_SVG(!!storm), iconSize: [26, 26], iconAnchor: [13, 13] }),
           title: m.label,
         }).addTo(layer).bindPopup(m.label));
       if (route && route.length) {
-        L.polyline(route.map(([lon, lat]) => [lat, lon]),
-          { color: lineColor(!!storm, routeLevel), weight: 4 }).addTo(layer);
-        map.fitBounds(route.map(([lon, lat]) => [lat, lon]));
+        const latLngs = route.map(([lon, lat]) => [lat, lon]);
+        L.polyline(latLngs, { color: lineColor(!!storm, routeLevel), weight: 4 }).addTo(layer);
+        map.fitBounds(latLngs, { padding: [28, 28] });
+      } else {
+        map.setView(center, zoom ?? Math.max(map.getZoom(), 7));
       }
       if (storm) {
         // Visible storm footprint so the simulate toggle changes the map too.
@@ -61,7 +63,7 @@ export default function MapView({ center, route, markers, storm, routeLevel }: {
       }
     })();
     return () => { cancelled = true; };
-  }, [center, route, markers, storm, routeLevel]);
+  }, [center, route, markers, storm, routeLevel, zoom]);
 
   return <div ref={ref} style={{ height: 380, borderRadius: 12, overflow: "hidden" }} />;
 }
