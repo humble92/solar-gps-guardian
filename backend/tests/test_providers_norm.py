@@ -84,6 +84,24 @@ class TestProviderNormalize(unittest.TestCase):
         both = flares.normalize({"flux": [row(18, 0.0)], "flux_secondary": []})
         self.assertIsNone(both["xray_long"])
 
+    def test_broken_primary_flux_keeps_flare_lists(self):
+        from backend.providers import flares
+        from backend.providers.base import ProviderError
+        secondary = [{"time_tag": "t", "satellite": 19, "flux": 2.2e-7, "energy": "0.1-0.8nm"}]
+
+        def get(url, *a, **k):
+            if "primary/xrays-6-hour" in url:
+                raise ProviderError(f"GET {url}: JSONDecodeError: Extra data")
+            if "secondary/xrays-6-hour" in url:
+                return secondary
+            if "7-day" in url:
+                return [{"max_class": "C2.8"}]
+            return [{"max_class": "C2.8"}]
+        with patch.object(flares, "http_get_json", get):
+            f = flares.normalize(flares.fetch())
+        self.assertEqual(f["worst_7d_class"], "C2.8")
+        self.assertEqual((f["xray_long"], f["xray_satellite"]), (2.2e-7, 19))
+
     def test_tec_listing_fallback_picks_newest_tile(self):
         html = ('<a href="glotec_icao_20261031T193500Z.geojson">x</a>'
                 '<a href="glotec_icao_20261031T213500Z.geojson">x</a>'

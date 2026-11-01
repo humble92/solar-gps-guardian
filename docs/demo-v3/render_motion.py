@@ -30,6 +30,7 @@ async def main(chrome, args):
         b = await p.chromium.launch(executable_path=chrome)
         pg = await b.new_page(viewport={"width": 1920, "height": 1080})
         await pg.goto((HERE / "motion.html").as_uri())
+        await pg.evaluate("window.assetsReady")  # degraded banner image
         cdp = await pg.context.new_cdp_session(pg)
 
         async def grab(fmt="jpeg"):

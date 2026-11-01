@@ -9,9 +9,10 @@ def fetch(env=None):
     return {
         "latest": http_get_json(f"{BASE}/json/goes/primary/xray-flares-latest.json"),
         "week": http_get_json(f"{BASE}/json/goes/primary/xray-flares-7-day.json"),
-        "flux": http_get_json(f"{BASE}/json/goes/primary/xrays-6-hour.json"),
-        # Primary GOES sometimes reports 0.0 for hours (seen 2026-10-31,
-        # GOES-18); the secondary satellite fills that gap.
+        # Either flux file can fail on its own without dropping the flare
+        # lists: the primary reported 0.0 for 1.5 hours (2026-10-31) and was
+        # served as broken JSON (2026-11-01). The secondary fills either gap.
+        "flux": _optional(f"{BASE}/json/goes/primary/xrays-6-hour.json"),
         "flux_secondary": _optional(f"{BASE}/json/goes/secondary/xrays-6-hour.json"),
     }
 
@@ -19,7 +20,7 @@ def fetch(env=None):
 def _optional(url):
     try:
         return http_get_json(url)
-    except Exception:  # noqa: BLE001 - the primary feed is still usable
+    except Exception:  # noqa: BLE001 - one flux file down is not a failed provider
         return []
 
 

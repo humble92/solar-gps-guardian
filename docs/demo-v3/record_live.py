@@ -227,7 +227,7 @@ async def run(take, P):
     await take.click(pg.locator(".topnav a", has_text="Newsletters"))
     await pg.wait_for_selector(".nl-item", timeout=15000)
     await asyncio.sleep(0.8)
-    await take.click(pg.locator(".nl-item", has_text="2026-08"))
+    await take.click(pg.locator(".nl-item", has_text="2026-10"))
     await pg.wait_for_selector(".md", timeout=20000)
     await asyncio.sleep(0.9)
     await take.page.evaluate("document.querySelector('.md img').scrollIntoView({behavior: 'smooth', block: 'center'})")

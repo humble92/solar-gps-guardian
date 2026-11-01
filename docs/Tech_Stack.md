@@ -69,8 +69,9 @@ Each provider fails on its own; a failed or empty feed never stops the
 snapshot. Some feeds also have a fallback inside the provider:
 
 - GOES X-ray (`flares`): when the primary satellite's newest long-band
-  sample is 0 (a data gap; seen for 1.5 hours on 2026-10-31), the secondary
-  satellite's file is used.
+  sample is 0 (a data gap; seen for 1.5 hours on 2026-10-31) or its file
+  fails to load (served as broken JSON on 2026-11-01), the secondary
+  satellite's file is used. The 7-day flare lists are kept either way.
 - GloTEC (`tec`): the index JSON is sometimes published as an empty list
   while tiles keep arriving, so an empty index falls back to the newest
   tile in the directory listing. The grid is stored with its tile time.

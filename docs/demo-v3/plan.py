@@ -9,16 +9,17 @@ from pathlib import Path
 HERE = Path(__file__).parent
 
 LAYOUT = {
-    "hook":      {"pre": 2.6, "post": 0.6},
-    "problem":   {"pre": 0.3, "post": 0.5},
-    "insight":   {"pre": 0.3, "post": 0.6},
-    "dashboard": {"pre": 0.6, "post": 0.5},
-    "route":     {"pre": 0.2, "post": 1.4, "gaps": {0: 2.4}},
-    "storm":     {"pre": 0.3, "post": 0.8, "gaps": {0: 1.2, 2: 1.2, 3: 0.6}},
-    "alerts":    {"pre": 0.3, "post": 0.6},
+    "hook":      {"pre": 2.2, "post": 0.6},
+    "problem":   {"pre": 0.3, "post": 0.4},
+    "insight":   {"pre": 0.3, "post": 0.4},
+    "dashboard": {"pre": 0.4, "post": 0.3},
+    "route":     {"pre": 0.2, "post": 1.0, "gaps": {0: 2.4}},
+    "storm":     {"pre": 0.3, "post": 0.6, "gaps": {0: 1.1, 2: 1.0, 3: 0.5}},
+    "alerts":    {"pre": 0.3, "post": 0.1},
     "trust":     {"pre": 0.3, "post": 0.4},
-    "close":     {"pre": 0.6, "post": 3.0},
+    "close":     {"pre": 0.6, "post": 2.4},
 }
+LINE_GAP = 0.3  # silence after each narration line
 
 
 def main():
@@ -32,8 +33,8 @@ def main():
         lines = []
         for i, ln in enumerate(s["lines"]):
             lines.append({"file": ln["file"], "start": round(t, 3), "dur": ln["dur"], "text": ln["text"]})
-            t += ln["dur"] + 0.35 + cfg.get("gaps", {}).get(i, 0.0)
-        t += cfg["post"] - 0.35
+            t += ln["dur"] + LINE_GAP + cfg.get("gaps", {}).get(i, 0.0)
+        t += cfg["post"] - LINE_GAP
         scenes.append({"scene": s["scene"], "start": round(start, 3), "end": round(t, 3), "lines": lines})
     plan = {"total": round(t, 3), "scenes": scenes}
     (HERE / "work").mkdir(exist_ok=True)

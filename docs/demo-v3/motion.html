@@ -401,23 +401,24 @@ function insight(t, L) {
 
 // ---------- TRUST ----------
 const CODE = [
-  "def high_band_start(kp=None):",
-  "    \"\"\"|Geomagnetic latitude| where the full Kp term starts, for this Kp.\"\"\"",
-  "    if kp is None:",
-  "        return MLAT_HIGH",
-  "    return min(MLAT_HIGH, AURORA_EDGE_KP0 - AURORA_EDGE_PER_KP * float(kp))",
-  "",
   "def score_for(kp=None, forecast_max_kp=None, xray_flux=None,",
-  "              cme_arrivals=None, tec_local=None, dayside=True, kp_factor=1.0):",
-  "    base_kp = _base_kp(kp, forecast_max_kp)",
+  "              cme_arrivals=None, tec_local=None, dayside=True, kp_factor=1.0,",
+  "              tec_anomaly=None, now_iso=None, gfz_kp=None):",
+  "    base_kp = _base_kp(kp, forecast_max_kp, gfz_kp)",
   "    flare = _flare_bonus(xray_flux) if dayside else 0",
-  "    s = base_kp * W_KP * kp_factor + flare + _cme_bonus(cme_arrivals or [])",
+  "    s = base_kp * W_KP * kp_factor + flare + _cme_bonus(cme_arrivals or [], now_iso)",
   "    if tec_local is not None and tec_local >= TEC_HIGH_TECU:",
   "        s += W_TEC_HIGH",
+  "    if tec_anomaly is not None and abs(tec_anomaly) >= TEC_ANOMALY_TECU:",
+  "        s += W_TEC_ANOMALY",
   "    s = max(0, min(100, round(s)))",
   "    level = \"CRITICAL\" if s >= 70 else (\"MODERATE\" if s >= 40 else \"LOW\")",
   "    return {\"score\": s, \"level\": level}",
 ];
+// Real DEGRADED banner, captured from a local run with DONKI unreachable.
+const DEG_IMG = new Image();
+window.assetsReady = new Promise((r) => { DEG_IMG.onload = r; DEG_IMG.onerror = r; });
+DEG_IMG.src = "degraded_banner.png";
 function trust(t, L) {
   bg(); chapter("WHY YOU CAN TRUST IT", t);
   // 0: real code from backend/risk.py
@@ -427,22 +428,22 @@ function trust(t, L) {
     panel(110, 130, 1700, 550, { fill: "#0b1219" });
     text("backend/risk.py", 150, 190, { size: 26, font: MONO, color: C.muted, weight: 500 });
     pill("NOT AI · FIXED FORMULA", 1450, 182, { bg: "#0f2e2a", fg: C.teal, size: 24 });
-    const hi = { 9: L[1] + .2, 10: L[1] + .2, 11: L[1] + 1.4, 12: L[1] + 1.4, 4: L[1] + 2.0, 14: L[1] + 2.6 };
+    const hi = { 3: L[1] + .2, 4: L[1] + .9, 5: L[1] + .9, 6: L[1] + 2.1, 7: L[1] + 2.1, 8: L[1] + 2.7, 9: L[1] + 2.7, 11: L[1] + 3.4 };
     CODE.forEach((ln, i) => {
-      const y = 236 + i * 28;
-      if (hi[i] != null) { const h = fin(t, hi[i], .4); ctx.fillStyle = `rgba(245,166,35,${.16 * h})`; ctx.fillRect(130, y - 21, 1660, 28); }
-      const col = [0, 6, 7, 15].includes(i) ? "#9cc4ff" : i === 1 ? C.muted : C.text;
+      const y = 250 + i * 31;
+      if (hi[i] != null) { const h = fin(t, hi[i], .4); ctx.fillStyle = `rgba(245,166,35,${.16 * h})`; ctx.fillRect(130, y - 23, 1660, 31); }
+      const col = [0, 1, 2, 12].includes(i) ? "#9cc4ff" : C.text;
       text(ln, 150, y, { size: 22, font: MONO, weight: 500, color: col, alpha: fin(t, L[0] + i * .05, .3) });
     });
     // plain-English weights
-    const w = [["each storm level", "+10"], ["flare in progress (sunlit)", "+15 / +25"], ["plasma cloud incoming", "+20"], ["thick charged layer", "+10"]];
+    const w = [["each storm level", "+10"], ["flare in progress, sunlit", "+15 / +25"], ["plasma cloud arriving", "+20"], ["thick charged layer", "+10"], ["layer far from normal", "+10"]];
     w.forEach(([k, v], i) => {
-      const a = fin(t, L[1] + i * .6, .4); const x = 110 + i * 432;
-      panel(x, 700, 410, 140, { alpha: a, fill: "#101820" });
-      text(v, x + 30, 770, { size: 52, weight: 800, color: C.amber, alpha: a });
-      text(k, x + 30, 816, { size: 28, weight: 600, color: C.muted, alpha: a });
+      const a = fin(t, L[1] + i * .6, .4); const x = 110 + i * 344;
+      panel(x, 700, 326, 140, { alpha: a, fill: "#101820" });
+      text(v, x + 26, 770, { size: 48, weight: 800, color: C.amber, alpha: a });
+      text(k, x + 26, 816, { size: 24, weight: 600, color: C.muted, alpha: a });
     });
-    text("≥ 70 CRITICAL  ·  40–69 MODERATE  ·  < 40 LOW", W / 2, 885, { size: 32, weight: 700, color: C.muted, align: "center", alpha: fin(t, L[1] + 2.6) });
+    text("≥ 70 CRITICAL  ·  40–69 MODERATE  ·  < 40 LOW", W / 2, 885, { size: 32, weight: 700, color: C.muted, align: "center", alpha: fin(t, L[1] + 3.4) });
     ctx.restore();
   }
   // 2: AI only writes the words
@@ -463,32 +464,35 @@ function trust(t, L) {
     text("Meta open model on Baseten · writes words, never the score", W / 2, 860, { size: 34, weight: 600, color: C.muted, align: "center", alpha: lk });
     ctx.restore();
   }
-  // 3: a feed goes dark -> degraded, still scoring
+  // 3: a feed goes dark -> the real page says DEGRADED and keeps scoring
   const d = fin(t, L[3], .5);
   if (d > 0) {
     ctx.save(); ctx.globalAlpha = d; const lt = t - L[3];
-    const feeds = ["NOAA SWPC", "NASA DONKI", "GloTEC", "Kyoto Dst", "GFZ Kp"];
+    const feeds = ["NOAA SWPC", "NASA DONKI", "GloTEC", "NOAA OVATION", "GFZ Kp"];
+    const tx = 760, ty = 545;
     feeds.forEach((f, i) => {
-      const y = 260 + i * 120, dead = i === 1 && lt > 1.4;
-      panel(160, y, 500, 92, { fill: "#0e151d", stroke: dead ? C.red : C.line });
-      ctx.fillStyle = dead ? C.red : C.green; ctx.beginPath(); ctx.arc(205, y + 46, 12, 0, 7); ctx.fill();
-      text(f, 240, y + 58, { size: 36, weight: 600, color: dead ? C.red : C.text });
-      if (dead) text("offline", 630, y + 58, { size: 28, weight: 700, color: C.red, align: "right" });
-      // connector into the score panel; a moving dot while the feed is up
+      const y = 250 + i * 116, dead = i === 1 && lt > 1.2;
+      panel(110, y, 440, 88, { fill: "#0e151d", stroke: dead ? C.red : C.line });
+      ctx.fillStyle = dead ? C.red : C.green; ctx.beginPath(); ctx.arc(152, y + 44, 12, 0, 7); ctx.fill();
+      text(f, 182, y + 56, { size: 32, weight: 600, color: dead ? C.red : C.text });
+      if (dead) text("offline", 530, y + 56, { size: 26, weight: 700, color: C.red, align: "right" });
       ctx.strokeStyle = dead ? "rgba(248,113,113,.35)" : "rgba(45,212,191,.45)"; ctx.lineWidth = 2;
       if (dead) ctx.setLineDash([8, 10]);
-      ctx.beginPath(); ctx.moveTo(660, y + 46); ctx.bezierCurveTo(860, y + 46, 860, 540, 1060, 540); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(550, y + 44); ctx.bezierCurveTo(660, y + 44, 660, ty, tx, ty); ctx.stroke(); ctx.setLineDash([]);
       if (!dead) { const k = (t * .7 + i * .21) % 1, u = 1 - k;
-        const bx = u*u*u*660 + 3*u*u*k*860 + 3*u*k*k*860 + k*k*k*1060, by = u*u*u*(y+46) + 3*u*u*k*(y+46) + 3*u*k*k*540 + k*k*k*540;
+        const bx = u*u*u*550 + 3*u*u*k*660 + 3*u*k*k*660 + k*k*k*tx, by = u*u*u*(y+44) + 3*u*u*k*(y+44) + 3*u*k*k*ty + k*k*k*ty;
         ctx.fillStyle = C.teal; ctx.beginPath(); ctx.arc(bx, by, 6, 0, 7); ctx.fill(); }
     });
-    panel(1060, 330, 700, 420, { fill: "#121a22" });
-    text("Every 15 min · serverless on Modal", 1100, 400, { size: 28, weight: 600, color: C.muted });
-    pill("MODERATE", 1100, 480, { bg: "#3a2c07", fg: C.amber, size: 30 });
-    text("40/100", 1330, 495, { size: 52, weight: 800 });
-    pill("DEGRADED MODE", 1100, 580, { bg: "#2a2438", fg: C.violet, size: 30, alpha: fin(t, L[3] + 2.0, .4) });
-    text("still scoring on NOAA's baseline", 1100, 680, { size: 34, weight: 600, color: C.teal, alpha: fin(t, L[3] + 3.2, .4) });
-    text("never a guessed number", 1100, 725, { size: 30, weight: 500, color: C.muted, alpha: fin(t, L[3] + 3.6, .4) });
+    text("Every 5 min · serverless on Modal", tx, 240, { size: 28, weight: 600, color: C.muted });
+    const im = fin(t, L[3] + 1.6, .5);
+    if (DEG_IMG.naturalWidth && im > 0) {
+      const bw = 1060, bh = bw * DEG_IMG.naturalHeight / DEG_IMG.naturalWidth;
+      const by0 = Math.max(270, ty - bh / 2);
+      ctx.save(); ctx.globalAlpha = d * im;
+      rrect(tx, by0, bw, bh, 14); ctx.clip(); ctx.drawImage(DEG_IMG, tx, by0, bw, bh); ctx.restore();
+      ctx.save(); ctx.globalAlpha = d * im; ctx.strokeStyle = C.violet; ctx.lineWidth = 3; rrect(tx, by0, bw, bh, 14); ctx.stroke(); ctx.restore();
+      text("the live page, with DONKI unreachable", tx, by0 + bh + 44, { size: 26, weight: 600, color: C.muted, alpha: im });
+    }
     ctx.restore();
   }
 }
@@ -508,7 +512,7 @@ function close(t, L, dur) {
   const u = fin(t, L[1] + 2.4, .6);
   text("solar-gps-guardian.ninefruits.work", W / 2, 700, { size: 44, weight: 700, color: C.teal, align: "center", alpha: u });
   text("github.com/humble92/solar-gps-guardian", W / 2, 765, { size: 34, weight: 500, color: C.muted, align: "center", font: MONO, alpha: u });
-  text("Built on Modal · Baseten · Meta open model · NOAA & NASA open data", W / 2, 960, { size: 28, weight: 600, color: C.muted, align: "center", alpha: fin(t, L[1] + 4.3, .6) });
+  text("Built on Modal · Baseten · Meta open model · NOAA & NASA open data", W / 2, 860, { size: 28, weight: 600, color: C.muted, align: "center", alpha: fin(t, L[1] + 2.8, .6) });
   if (t < L[1] - .2) text("The next storm is already on its way.", W / 2, 540, { size: 64, weight: 700, align: "center", alpha: win(t, L[0], L[1] - .2, .6) });
   const end = clamp((t - (dur - 1.2)) / 1.2); if (end > 0) { ctx.fillStyle = `rgba(0,0,0,${end})`; ctx.fillRect(0, 0, W, H); }
 }
