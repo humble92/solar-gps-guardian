@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build docs/hackathon-demo-v3.mp4 (1920x1080, ~2:53).
+# Build docs/hackathon-demo-v3.mp4 (1920x1080, ~2:57).
 #
 #   PY=<python with kokoro-onnx numpy scipy soundfile playwright>
 #   CHROME=<chromium executable>  MODELS=<dir with kokoro-v1.0.onnx, voices-v1.0.bin>

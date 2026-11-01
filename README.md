@@ -2,6 +2,10 @@
 
 Live site: https://solar-gps-guardian.ninefruits.work/
 
+[![Watch the 3-minute demo video](docs/images/demo-video.png)](https://youtu.be/WcxweZub2GA)
+
+Demo video (3 min): https://youtu.be/WcxweZub2GA
+
 A public space-weather dashboard and email alert for GPS risk. The score is
 a fixed formula over open data. A language model may rewrite the sentence
 only when it repeats that score. The same model also writes a monthly
