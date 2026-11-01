@@ -60,24 +60,26 @@ The map is Leaflet on OpenStreetMap tiles, centered on that position. An amber p
 
 From and To are place names. Assess route asks Nominatim for coordinates and
 OSRM for a driving path. Those two calls stay in the browser. The page draws
-the full path and prints distance and duration. In the capture above,
-Toronto to Ottawa is 449.8 km, about 317 minutes. All 8 samples scored
-MODERATE, 40/100 (range 40-40), so the line is amber.
+the full path and prints distance and duration. In the capture above
+(2026-11-01, 01:25 UTC), Toronto to Ottawa is 449.8 km, about 317 minutes.
+All 10 samples scored LOW, 37/100 (range 37-37), so the line is teal.
 
 The corridor score is not the banner score copied onto the line. The page
-keeps at most 8 vertices from the OSRM line. The first vertex and the last
-are always included. The other six are spaced evenly through the vertex
-list, so the gaps follow how many points OSRM returned, not kilometers
-along the road. A shorter line, one with 8 or fewer vertices, sends every
-vertex. Those points go to `POST /route-score`.
+samples the OSRM line at equal distances along the road: about one point
+every 50 km, at least 2 (the start and the end) and at most 16. Toronto to
+Hamilton (68 km) gets 3 points, Toronto to Ottawa (450 km) 10 points 50 km
+apart, and Toronto to Chicago (839 km) 16 points 56 km apart. The points
+are interpolated on the line, so they need not be OSRM vertices. (OSRM
+puts vertices densely in towns and sparsely on highways, so the earlier
+every-k-th-vertex sampling left gaps from 17 to 104 km on Toronto to
+Ottawa.) Those points go to `POST /route-score`.
 
 Each sample uses the same score as the banner and the mail: nearest TEC
 cell, geomagnetic-latitude band on the Kp term only (the high band reaches
 farther south in strong storms), and no bonus for a flare in progress on the
 night side. Planetary Kp, the 3-day forecast, and any Earth-arrival CME
 are the same at every sample. What can differ along the road is TEC, the
-latitude band, and day or night. The server accepts at most 16 points. The
-page sends 8.
+latitude band, and day or night. The server accepts at most 16 points.
 
 The number in the sentence is the highest sample, not the average. A quiet
 stretch does not pull that number down. The same sentence prints the lowest
@@ -111,11 +113,11 @@ One button cycles through three views. The label is the next view.
    then reads Simulate Route Risk. The capture above is this card.
 3. Route risk. The next click returns the banner to the live position
    score and scores the current From and To fields. Those fields start as
-   Toronto, ON and Hamilton, ON. The page draws that OSRM path, samples up
-   to 8 vertices, and posts them to `/route-score` with `scenario` set to
-   `storm`. The server scores those samples with the same superstorm
+   Toronto, ON and Hamilton, ON. The page draws that OSRM path, samples it
+   the same way (3 points for Toronto to Hamilton), and posts them to
+   `/route-score` with `scenario` set to `storm`. The server scores those samples with the same superstorm
    numbers (Kp 8.3, forecast maximum Kp 9, an X4.2 flare in progress, one
-   Earth-arrival CME). The clock and the TEC grid stay live, so night side
+   Earth-arrival CME); the live GFZ Kp is left out of this hypothetical. The clock and the TEC grid stay live, so night side
    and local TEC still change the sample. The line color and the sentence
    use the highest of those hypothetical samples. The button then reads
    Back to Live.

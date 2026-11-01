@@ -87,9 +87,10 @@ shows DEGRADED MODE, and the sentence names the missing feed.
 and their limits are in [Pipeline_Study.md](Pipeline_Study.md).
 
 The page does not recompute the score. The banner calls
-`GET /local-score`. A route calls `POST /route-score` with up to 8 samples
-of the OSRM line, including the start and the end, spaced through the
-vertex list. The corridor score is the highest sample. See `Manual.md` for
+`GET /local-score`. A route calls `POST /route-score` with samples of the
+OSRM line taken at equal distances along the road, about one per 50 km,
+2 to 16 of them including the start and the end (`frontend/lib/routeSample.ts`,
+tested with `npm test`). The corridor score is the highest sample. See `Manual.md` for
 what the sentence and the line color show. Demo mode and the superstorm
 step use fixed labels because those cards are not on the server. The
 route-risk step of the same button sends `scenario=storm`, so those

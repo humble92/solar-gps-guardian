@@ -192,6 +192,9 @@ class TestScore(unittest.TestCase):
         self.assertEqual(storm["worst"]["level"], "CRITICAL")
         self.assertEqual(storm["worst"]["score"], 100)
         self.assertGreater(storm["worst"]["score"], live["worst"]["score"])
+        live_gfz = {**quiet, "kp_gfz": {"ok": True, "kp": 3.0}}
+        hypo = score_route(live_gfz, points, scenario="storm")["worst"]["advisory"]
+        self.assertNotIn("Kp sources differ", hypo)
 
 
 if __name__ == "__main__":

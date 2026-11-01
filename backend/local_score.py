@@ -24,6 +24,9 @@ def storm_snapshot(snapshot):
     base["now"] = dict(STORM_NOW)
     base["forecast_3d"] = dict(STORM_FORECAST)
     base["events"] = dict(STORM_EVENTS)
+    # The live GFZ nowcast is not part of the hypothetical storm; comparing
+    # it with the storm's Kp would print a false "Kp sources differ".
+    base["kp_gfz"] = {}
     base["degraded"] = False
     return base
 

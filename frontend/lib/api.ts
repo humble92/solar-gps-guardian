@@ -82,17 +82,7 @@ export async function fetchPlanetaryRisk(): Promise<Risk | null> {
   return asRisk(await r.json());
 }
 
-export function sampleRoute(coords: [number, number][], n = 8): RoutePoint[] {
-  if (!coords.length) return [];
-  const count = Math.min(n, coords.length);
-  const out: RoutePoint[] = [];
-  for (let i = 0; i < count; i++) {
-    const idx = count === 1 ? 0 : Math.round((i * (coords.length - 1)) / (count - 1));
-    const [lon, lat] = coords[idx];
-    out.push({ lat, lon, label: `s${i}` });
-  }
-  return out;
-}
+export { sampleRoute } from "./routeSample";
 
 export async function fetchRouteScore(points: RoutePoint[], scenario?: "storm"): Promise<RouteScore | null> {
   if (!API) return null;
