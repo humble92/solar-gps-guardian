@@ -163,7 +163,7 @@ come from the code:
 
 | Function | Schedule |
 |---|---|
-| `ingest_cron` | Every 15 minutes from the deploy time (`modal.Period`) |
+| `ingest_cron` | Every 5 minutes from the deploy time (`modal.Period`), 240-second timeout |
 | `storm_watch` | Every 6 hours from the deploy time (`modal.Period`). Sends only when that subscriber's local score is CRITICAL. |
 | `daily_digest` | 13:00 UTC every day (`modal.Cron`) |
 
@@ -227,8 +227,9 @@ deploy, `MODAL_REGION` is empty. Inside a container it is the narrow region
 GitHub Actions.
 
 The Starter plan includes $30 of compute credit per month. This workload is
-a 15-minute ingest, an hourly storm check, one daily mail batch, and HTTP
-when the page is opened. Pinning only the DONKI fetch to `region="us"`
+a 5-minute ingest (288 runs a day, three times the earlier 15-minute
+schedule), a 6-hour storm check, one daily mail batch, and HTTP when the
+page is opened. Pinning only the DONKI fetch to `region="us"`
 applies the 1.15x region multiplier to that short container.
 
 ## Vercel

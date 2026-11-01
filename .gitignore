@@ -11,9 +11,14 @@ node_modules/
 .next/
 .npm-cache/
 frontend/.next/
+frontend/tsconfig.tsbuildinfo
 
 # os/editor
 .DS_Store
 
 # docs
 docs/Implementation.md
+!docs/demo-v3/
+docs/demo-v3/work/
+docs/demo-v3/audio/
+*.mp4

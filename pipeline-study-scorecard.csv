@@ -6,3 +6,5 @@ Candidate,"GPS fidelity (25%)","Lead time (20%)","Location and route (15%)","Out
 "P5 LLM direct judgment",2,3,2,2,4,2,1,2.35,"REJECT. Numeric hallucination and cost",Natural-language quality,"Not auditable; per-call cost",Model-chosen numbers break the fixed-rule principle
 "P6 OMNI science-grade",5,1,1,2,2,3,5,2.65,Backtest only,Best quality for study,Delayed and blocked from Canada,Excluded from the live path
 Scale,,,,,,,,,,,,"1-5 (5 = best). Percents in the header are the weights. Study date 2026-10-26 (sandbox live tests)."
+Note 2026-10-31,,,,,,,,,,,,"Correction to P3: the CCMC DONKI host takes no API key (since 2026-09-30); the ""needs a key"" con was wrong. The scores above are the 2026-10-26 study and are not changed."
+Note 2026-10-31,,,,,,,,,,,,"P4 as built: the GFZ Kp cross-check was not wired into the score until 2026-10-31 (the larger of SWPC and GFZ Kp is now scored); Kyoto Dst is stored and used by the newsletter, not scored. Later additions are listed in docs/Pipeline_Study.md."

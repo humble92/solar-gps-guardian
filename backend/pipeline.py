@@ -67,6 +67,11 @@ def build_snapshot(fragments, health, now=None):
     grid = list(raw_grid) if isinstance(raw_grid, list) else []
     if isinstance(tec, dict):
         tec.pop("grid", None)
+    ov = fragments.get("ovation", {})
+    raw_aurora = ov.get("grid") if isinstance(ov, dict) else None
+    aurora = list(raw_aurora) if isinstance(raw_aurora, list) else []
+    if isinstance(ov, dict):
+        ov.pop("grid", None)
     snap = {
         "snapshot_version": SNAPSHOT_VERSION,
         "fetched_at": now or utcnow_iso(),
@@ -74,6 +79,7 @@ def build_snapshot(fragments, health, now=None):
         "flags": {
             "donki_available": bool(donki.get("ok")),
             "tec_available": bool(tec.get("available", tec.get("ok"))),
+            "ovation_available": bool(ov.get("available")),
             "stale_sources": [p for p, h in health.items() if not h.get("ok")],
         },
         "now": {
@@ -87,6 +93,8 @@ def build_snapshot(fragments, health, now=None):
                         "storm_expected": f3.get("storm_expected")},
         "events": {
             "latest_flare": fl.get("latest_flare"),
+            # GOES long-band flux at fetch time drives the dayside flare term.
+            "xray_flux": fl.get("xray_long"), "xray_time": fl.get("xray_time"),
             "worst_flare_7d": fl.get("worst_7d_class"),
             "mx_flares_7d": fl.get("mx_flares_7d"),
             "donki_counts": donki.get("counts"),
@@ -96,6 +104,11 @@ def build_snapshot(fragments, health, now=None):
                 "latest_time": tec.get("latest_time"), "tec_max": tec.get("tec_max"),
                 "grid_ref": "tec_grid:1"},
         "_tec_grid": grid,
+        "aurora": {"available": bool(ov.get("available")),
+                   "observation_time": ov.get("observation_time"),
+                   "forecast_time": ov.get("forecast_time"),
+                   "aurora_max": ov.get("aurora_max"), "grid_ref": "aurora_grid:1"},
+        "_aurora_grid": aurora,
         "dst": fragments.get("dst", {}), "kp_gfz": fragments.get("kp_gfz", {}),
         "stereo": fragments.get("stereo", {}), "enlil": fragments.get("enlil", {}),
         "health": health, "fragments": fragments,
@@ -104,16 +117,20 @@ def build_snapshot(fragments, health, now=None):
 
 
 def persist(store, snap):
-    """Save one planetary snapshot. A non-empty TEC grid is stored beside it.
+    """Save one planetary snapshot. Non-empty TEC and aurora grids go beside it.
 
     An empty grid leaves the previous cells in place so a missed tile does
-    not wipe the last good lookup. The public snapshot keeps grid_ref, not
+    not wipe the last good lookup. The TEC grid keeps its tile time, so a
+    score can tell how old it is (risk.TEC_MAX_AGE_H). The public snapshot keeps grid_ref, not
     the cells.
     """
     grid = snap.pop("_tec_grid", None)
+    aurora = snap.pop("_aurora_grid", None)
     store.save_snapshot(snap)
     if grid:
-        store.save_tec_grid(grid)
+        store.save_tec_grid({"time_tag": snap.get("tec", {}).get("latest_time"), "cells": grid})
+    if aurora:
+        store.save_aurora_grid(aurora)
     return snap
 
 

@@ -78,7 +78,7 @@ class TestStoreMailer(unittest.TestCase):
         self.store.subscribe("night@b.c", "Night side", 45.0, 180.0)
         snap = {**QUIET, "fetched_at": "2026-10-30T12:00:00Z",
                 "now": {"kp": 2.0}, "forecast_3d": {"max_kp": 2.0},
-                "events": {"worst_flare_7d": "X1.0", "cme_earth_arrivals": []}}
+                "events": {"xray_flux": 1.0e-4, "cme_earth_arrivals": []}}
         r = mailer.run_batch(self.store, snap, kind="daily", dry_dir=f"{self.tmp}/out")
         self.assertEqual(r["sent"], 2)
         texts = [p.read_text() for p in pathlib.Path(f"{self.tmp}/out").glob("*.eml")]
@@ -99,9 +99,10 @@ class TestStoreMailer(unittest.TestCase):
         from backend import pipeline
         pipeline.persist(self.store, snap)
         self.assertNotIn("_tec_grid", self.store.load_snapshot())
-        self.assertEqual(self.store.load_tec_grid(), [[-79.4, 43.7, 55.0]])
+        kept = {"time_tag": "t", "cells": [[-79.4, 43.7, 55.0]]}
+        self.assertEqual(self.store.load_tec_grid(), kept)
         pipeline.persist(self.store, {"fetched_at": "x", "_tec_grid": []})
-        self.assertEqual(self.store.load_tec_grid(), [[-79.4, 43.7, 55.0]])
+        self.assertEqual(self.store.load_tec_grid(), kept)
 
 
 if __name__ == "__main__":

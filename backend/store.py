@@ -1,12 +1,13 @@
 """Repository: sqlite persistence behind a small interface (swap-ready).
 
 Tables: subscriptions (email+region), telemetry_cache (latest snapshot),
-send_log (dedup + audit). One writer at a time; WAL enabled.
+tec_grid and aurora_grid (latest lookup grids), send_log (dedup + audit). One writer at a time; WAL enabled.
 """
 import json
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS subscriptions(
@@ -16,6 +17,8 @@ CREATE TABLE IF NOT EXISTS subscriptions(
 CREATE TABLE IF NOT EXISTS telemetry_cache(
   id INTEGER PRIMARY KEY CHECK(id=1), snapshot TEXT, updated_at REAL);
 CREATE TABLE IF NOT EXISTS tec_grid(
+  id INTEGER PRIMARY KEY CHECK(id=1), cells TEXT, updated_at REAL);
+CREATE TABLE IF NOT EXISTS aurora_grid(
   id INTEGER PRIMARY KEY CHECK(id=1), cells TEXT, updated_at REAL);
 CREATE TABLE IF NOT EXISTS send_log(
   id INTEGER PRIMARY KEY, email TEXT, kind TEXT, event_key TEXT,
@@ -43,9 +46,24 @@ class Store:
         c.execute("PRAGMA journal_mode=WAL")
         return c
 
+    @contextmanager
+    def _db(self):
+        """Commit (or roll back) and always close.
+
+        `with sqlite3.connect(...)` only commits; the connection stays open
+        until garbage collection, and an open file blocks Modal's
+        vol.reload() in the API container.
+        """
+        c = self._conn()
+        try:
+            with c:
+                yield c
+        finally:
+            c.close()
+
     # subscriptions ----------------------------------------------------
     def subscribe(self, email, region_name, lat, lon, radius_km=100):
-        with self._lock, self._conn() as c:
+        with self._lock, self._db() as c:
             c.execute(
                 "INSERT INTO subscriptions(email,region_name,lat,lon,radius_km,created_at)"
                 " VALUES(?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET"
@@ -56,54 +74,66 @@ class Store:
                              (email,)).fetchone()["id"]
 
     def unsubscribe(self, email):
-        with self._lock, self._conn() as c:
+        with self._lock, self._db() as c:
             cur = c.execute("UPDATE subscriptions SET active=0 WHERE email=?", (email,))
             return cur.rowcount > 0
 
     def list_active(self):
-        with self._conn() as c:
+        with self._db() as c:
             return [dict(r) for r in c.execute(
                 "SELECT * FROM subscriptions WHERE active=1")]
 
     # snapshot cache ---------------------------------------------------
     def save_snapshot(self, snap):
-        with self._lock, self._conn() as c:
+        with self._lock, self._db() as c:
             c.execute("INSERT INTO telemetry_cache(id,snapshot,updated_at) VALUES(1,?,?)"
                       " ON CONFLICT(id) DO UPDATE SET snapshot=excluded.snapshot,"
                       " updated_at=excluded.updated_at",
                       (json.dumps(snap), time.time()))
 
     def load_snapshot(self):
-        with self._conn() as c:
+        with self._db() as c:
             row = c.execute("SELECT snapshot FROM telemetry_cache WHERE id=1").fetchone()
             return json.loads(row["snapshot"]) if row else None
 
     def save_tec_grid(self, cells):
-        with self._lock, self._conn() as c:
+        with self._lock, self._db() as c:
             c.execute("INSERT INTO tec_grid(id,cells,updated_at) VALUES(1,?,?)"
                       " ON CONFLICT(id) DO UPDATE SET cells=excluded.cells,"
                       " updated_at=excluded.updated_at",
                       (json.dumps(cells), time.time()))
 
     def load_tec_grid(self):
-        with self._conn() as c:
+        with self._db() as c:
             row = c.execute("SELECT cells FROM tec_grid WHERE id=1").fetchone()
+            return json.loads(row["cells"]) if row else []
+
+    def save_aurora_grid(self, cells):
+        with self._lock, self._db() as c:
+            c.execute("INSERT INTO aurora_grid(id,cells,updated_at) VALUES(1,?,?)"
+                      " ON CONFLICT(id) DO UPDATE SET cells=excluded.cells,"
+                      " updated_at=excluded.updated_at",
+                      (json.dumps(cells), time.time()))
+
+    def load_aurora_grid(self):
+        with self._db() as c:
+            row = c.execute("SELECT cells FROM aurora_grid WHERE id=1").fetchone()
             return json.loads(row["cells"]) if row else []
 
     # send log ---------------------------------------------------------
     def already_sent(self, email, kind, event_key):
-        with self._conn() as c:
+        with self._db() as c:
             return c.execute("SELECT 1 FROM send_log WHERE email=? AND kind=? AND event_key=?",
                              (email, kind, event_key)).fetchone() is not None
 
     def log_sent(self, email, kind, event_key):
-        with self._lock, self._conn() as c:
+        with self._lock, self._db() as c:
             c.execute("INSERT OR IGNORE INTO send_log(email,kind,event_key,sent_at)"
                       " VALUES(?,?,?,?)", (email, kind, event_key, time.time()))
 
     # newsletters ------------------------------------------------------
     def save_newsletter(self, period, title, markdown, chart_svg, package):
-        with self._lock, self._conn() as c:
+        with self._lock, self._db() as c:
             c.execute(
                 "INSERT INTO newsletters(period,title,markdown,chart_svg,package,created_at)"
                 " VALUES(?,?,?,?,?,?) ON CONFLICT(period) DO UPDATE SET"
@@ -116,12 +146,12 @@ class Store:
                              (period,)).fetchone()["id"]
 
     def list_newsletters(self):
-        with self._conn() as c:
+        with self._db() as c:
             return [dict(r) for r in c.execute(
                 "SELECT id,period,title,created_at FROM newsletters ORDER BY period DESC")]
 
     def get_newsletter(self, nid):
-        with self._conn() as c:
+        with self._db() as c:
             row = c.execute("SELECT * FROM newsletters WHERE id=?", (nid,)).fetchone()
             if not row:
                 return None

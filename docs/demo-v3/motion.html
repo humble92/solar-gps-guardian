@@ -1,0 +1,524 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>motion</title>
+<style>html,body{margin:0;background:#05080d;overflow:hidden}canvas{display:block}</style>
+</head><body><canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Explainer scenes for the demo video. The recorder sets window.SCENE
+// ({name, dur, lines: [local start seconds]}) and calls renderAt(t) per frame.
+const W = 1920, H = 1080;
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const C = { bg: "#05080d", panel: "#121a22", line: "#243140", text: "#e8eef4", muted: "#93a5b5",
+  amber: "#f5a623", teal: "#2dd4bf", red: "#f87171", green: "#4ade80", violet: "#c4b5fd" };
+const FONT = "system-ui, -apple-system, 'Helvetica Neue', sans-serif";
+const MONO = "'SF Mono', Menlo, monospace";
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const easeOut = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const fin = (t, s, d = .6) => easeOut((t - s) / d);           // fade/slide in from s
+const fout = (t, s, d = .5) => 1 - ease((t - s) / d);          // fade out from s
+const win = (t, s, e, d = .5) => Math.min(fin(t, s, d), e == null ? 1 : fout(t, e - d, d));
+const lerp = (a, b, k) => a + (b - a) * k;
+function rng(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
+function text(s, x, y, { size = 48, weight = 600, color = C.text, align = "left", alpha = 1, font = FONT, base = "alphabetic", spacing = 0 } = {}) {
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= clamp(alpha); ctx.fillStyle = color;
+  ctx.font = `${weight} ${size}px ${font}`; ctx.textAlign = align; ctx.textBaseline = base;
+  if (spacing) ctx.letterSpacing = spacing + "px";
+  ctx.fillText(s, x, y); ctx.restore();
+}
+function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function panel(x, y, w, h, { alpha = 1, stroke = C.line, fill = C.panel, r = 16, lw = 2 } = {}) {
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; rrect(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.stroke(); ctx.restore();
+}
+function pill(s, x, y, { bg, fg, size = 30, alpha = 1, align = "left" } = {}) {
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.font = `800 ${size}px ${FONT}`;
+  const w = ctx.measureText(s).width + size * 1.1, h = size * 1.6;
+  const x0 = align === "center" ? x - w / 2 : x;
+  rrect(x0, y - h / 2, w, h, h / 2); ctx.fillStyle = bg; ctx.fill();
+  ctx.fillStyle = fg; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  ctx.fillText(s, x0 + size * .55, y + 1); ctx.restore(); return w;
+}
+function chapter(label, t) { // small chapter tag, top-left
+  const a = win(t, .1, null, .5);
+  ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = C.amber; ctx.fillRect(72, 66, 6, 30);
+  ctx.restore(); text(label, 92, 92, { size: 26, weight: 700, color: C.amber, alpha: a, spacing: 3 });
+}
+const STARS = (() => { const r = rng(7); return Array.from({ length: 420 }, () => [r() * W, r() * H, r() * 1.6 + .2, r()]); })();
+function stars(t, alpha = 1) {
+  ctx.save(); for (const [x, y, s, p] of STARS) {
+    ctx.globalAlpha = alpha * (.35 + .5 * Math.abs(Math.sin(t * .8 + p * 20))); ctx.fillStyle = "#cfe3ff";
+    ctx.fillRect(x, y, s, s);
+  } ctx.restore();
+}
+function bg() { ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H); }
+function sun(x, y, r, t, alpha = 1) {
+  ctx.save(); ctx.globalAlpha = alpha;
+  const g = ctx.createRadialGradient(x, y, r * .2, x, y, r * 3.2);
+  g.addColorStop(0, "rgba(255,190,80,.55)"); g.addColorStop(.35, "rgba(255,120,30,.18)"); g.addColorStop(1, "rgba(255,90,0,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 3.2, 0, 7); ctx.fill();
+  const b = ctx.createRadialGradient(x - r * .3, y - r * .3, r * .1, x, y, r);
+  b.addColorStop(0, "#fff3c4"); b.addColorStop(.5, "#ffb43a"); b.addColorStop(1, "#ff6a00");
+  ctx.fillStyle = b; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+  // granulation shimmer
+  const rr = rng(3); for (let i = 0; i < 70; i++) {
+    const a = rr() * 7, d = Math.sqrt(rr()) * r * .92, s = 3 + rr() * 9;
+    ctx.globalAlpha = alpha * (.12 + .1 * Math.sin(t * 2 + i)); ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, s, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+// Orthographic globe. rot = central longitude (deg), tilt = central latitude.
+function proj(lat, lon, cx, cy, R, rot = 0, tilt = 15) {
+  const d = Math.PI / 180, la = lat * d, lo = (lon - rot) * d, t0 = tilt * d;
+  const x = Math.cos(la) * Math.sin(lo);
+  const y = Math.cos(t0) * Math.sin(la) - Math.sin(t0) * Math.cos(la) * Math.cos(lo);
+  const z = Math.sin(t0) * Math.sin(la) + Math.cos(t0) * Math.cos(la) * Math.cos(lo);
+  return [cx + R * x, cy - R * y, z];
+}
+function globe(cx, cy, R, { rot = 0, tilt = 15, alpha = 1, fill = "#0f2a44", grid = "rgba(140,190,255,.28)" } = {}) {
+  ctx.save(); ctx.globalAlpha = alpha;
+  const g = ctx.createRadialGradient(cx - R * .35, cy - R * .4, R * .1, cx, cy, R);
+  g.addColorStop(0, "#1f5c8f"); g.addColorStop(1, fill);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.fill();
+  ctx.strokeStyle = grid; ctx.lineWidth = 1.5;
+  const path = (pts) => { ctx.beginPath(); let on = false;
+    for (const [x, y, z] of pts) { if (z > 0) { on ? ctx.lineTo(x, y) : ctx.moveTo(x, y); on = true; } else on = false; }
+    ctx.stroke(); };
+  for (let lat = -60; lat <= 60; lat += 30) path(Array.from({ length: 121 }, (_, i) => proj(lat, i * 3 - 180, cx, cy, R, rot, tilt)));
+  for (let lon = -180; lon < 180; lon += 30) path(Array.from({ length: 61 }, (_, i) => proj(i * 3 - 90, lon, cx, cy, R, rot, tilt)));
+  ctx.restore();
+}
+function clipGlobe(cx, cy, R) { ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.clip(); }
+function satellite(x, y, s = 1, alpha = 1) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y); ctx.scale(s, s);
+  ctx.fillStyle = "#3b82f6"; ctx.fillRect(-58, -12, 40, 24); ctx.fillRect(18, -12, 40, 24);
+  ctx.strokeStyle = "#93c5fd"; ctx.lineWidth = 1.5;
+  for (const ox of [-58, 18]) for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(ox + i * 10, -12); ctx.lineTo(ox + i * 10, 12); ctx.stroke(); }
+  ctx.fillStyle = "#d6dee8"; rrect(-16, -16, 32, 32, 5); ctx.fill();
+  ctx.fillStyle = "#94a3b8"; ctx.beginPath(); ctx.arc(0, 22, 7, 0, 7); ctx.fill();
+  ctx.restore();
+}
+function car(x, y, s = 1, color = C.amber, alpha = 1) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y); ctx.scale(s, s);
+  ctx.fillStyle = color; rrect(-60, -22, 120, 34, 10); ctx.fill(); rrect(-34, -46, 66, 30, 10); ctx.fill();
+  ctx.fillStyle = "#0b1622"; rrect(-26, -40, 24, 18, 4); ctx.fill(); rrect(4, -40, 22, 18, 4); ctx.fill();
+  ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(-34, 14, 13, 0, 7); ctx.arc(34, 14, 13, 0, 7); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- HOOK ----------
+const PARTS = (() => { const r = rng(11); return Array.from({ length: 900 }, () => ({ o: r(), y: (r() - .5), s: r() * 2.2 + .6, v: .7 + r() * .6 })); })();
+function hook(t, L) {
+  bg();
+  // Act 1 (0..L[2]): Sun hurls plasma at Earth
+  const a1 = t < L[2] + .6 ? 1 : fout(t, L[2], .7);
+  if (a1 > 0) {
+    ctx.save(); ctx.globalAlpha = a1;
+    stars(t);
+    const sx = 330, sy = 560, sr = lerp(150, 175, fin(t, 0, 3));
+    const burst = clamp((t - 2.2) / 6);
+    // CME stream
+    for (const p of PARTS) {
+      const life = ((t - 2.2) * .22 * p.v + p.o) % 1;
+      if (t < 2.2 + p.o * 1.2) continue;
+      const x = sx + life * 1300, spread = 40 + life * 380;
+      const y = sy + p.y * spread * (1 - life * .35) + Math.sin(life * 9 + p.o * 30) * 10;
+      ctx.globalAlpha = a1 * (1 - life) * .9 * burst;
+      ctx.fillStyle = life < .5 ? "#ffd27a" : "#ff8a3d";
+      ctx.fillRect(x, y, p.s * 2.6, p.s);
+    }
+    ctx.globalAlpha = a1; sun(sx, sy, sr, t);
+    // Earth + shaking magnetosphere
+    const ex = 1560, ey = 560, er = 70;
+    const hit = clamp((t - 4.6) / 1.5);
+    ctx.save(); ctx.strokeStyle = `rgba(120,200,255,${.25 + .5 * hit})`; ctx.lineWidth = 3;
+    for (let k = 0; k < 3; k++) {
+      const squash = 1 - hit * .25 + Math.sin(t * 9 + k) * .03 * hit;
+      ctx.beginPath(); ctx.ellipse(ex + 40 + k * 18, ey, (er + 60 + k * 45) * squash, er + 70 + k * 55, 0, Math.PI * .5, Math.PI * 1.5, true); ctx.stroke();
+    }
+    ctx.restore();
+    globe(ex, ey, er, { rot: -80 + t * 6, tilt: 20 });
+    // titles
+    const d = win(t, L[0], null, .4);
+    text("MAY 10, 2024", W / 2, 190, { size: 92, weight: 800, align: "center", alpha: d, spacing: 8 });
+    const b = fin(t, L[1], .5);
+    if (b > 0) { pill("G5 · EXTREME GEOMAGNETIC STORM", W / 2, 270, { bg: "#3d1414", fg: C.red, size: 32, alpha: b, align: "center" });
+      text("strongest in over 20 years", W / 2, 350, { size: 34, weight: 500, color: C.muted, align: "center", alpha: b }); }
+    ctx.restore();
+  }
+  // Act 2 (L[2]..L[3]): aurora over the night sky
+  const a2 = win(t, L[2], L[3] + .4, .7);
+  if (a2 > 0) {
+    ctx.save(); ctx.globalAlpha = a2; ctx.fillStyle = "#03060a"; ctx.fillRect(0, 0, W, H); stars(t, .8);
+    const lt = t - L[2];
+    for (let band = 0; band < 3; band++) {
+      for (let x = 0; x < W; x += 6) {
+        const yb = 330 + band * 80 + Math.sin(x * .004 + lt * .9 + band) * 70 + Math.sin(x * .011 - lt * 1.3) * 25;
+        const h = 260 + Math.sin(x * .007 + lt + band * 2) * 120;
+        const g = ctx.createLinearGradient(0, yb - h, 0, yb);
+        const col = band === 1 ? "236,72,153" : "45,212,140";
+        g.addColorStop(0, `rgba(${col},0)`); g.addColorStop(.75, `rgba(${col},${.16 + .08 * Math.sin(x * .02 + lt * 3)})`);
+        g.addColorStop(1, `rgba(${col},0)`);
+        ctx.fillStyle = g; ctx.fillRect(x, yb - h, 6, h);
+      }
+    }
+    // horizon with palms (Florida)
+    ctx.fillStyle = "#020406"; ctx.beginPath(); ctx.moveTo(0, 900);
+    for (let x = 0; x <= W; x += 40) ctx.lineTo(x, 900 + Math.sin(x * .01) * 12); ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.fill();
+    for (const px of [260, 330, 1580]) {
+      ctx.strokeStyle = "#020406"; ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(px, 905); ctx.quadraticCurveTo(px + 20, 780, px + 10, 690); ctx.stroke();
+      ctx.lineWidth = 9; for (let k = 0; k < 6; k++) { const a = -Math.PI + k * Math.PI / 5;
+        ctx.beginPath(); ctx.moveTo(px + 10, 690); ctx.quadraticCurveTo(px + 10 + Math.cos(a) * 60, 660, px + 10 + Math.cos(a) * 110, 700 + Math.abs(Math.sin(a)) * 30); ctx.stroke(); }
+    }
+    text("Auroras as far south as Florida", W / 2, 190, { size: 64, weight: 700, align: "center", alpha: fin(t, L[2] + .2) });
+    ctx.restore();
+  }
+  // Act 3 (L[3]..): precision tractor drifts off its line
+  const a3 = fin(t, L[3], .6);
+  if (a3 > 0) {
+    ctx.save(); ctx.globalAlpha = a3; const lt = t - L[3];
+    ctx.fillStyle = "#3b2a1a"; ctx.fillRect(0, 0, W, H);
+    for (let x = 140; x < W; x += 90) { ctx.fillStyle = "#4a3523"; ctx.fillRect(x, 0, 30, H); }
+    // planted straight rows (done)
+    ctx.strokeStyle = "#5fbf5a"; ctx.lineWidth = 8; ctx.setLineDash([10, 16]);
+    for (let x = 155; x < 900; x += 90) { ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x, 0); ctx.stroke(); }
+    ctx.setLineDash([]);
+    // current pass: straight, then drifting
+    const tx0 = 965, speed = 120, drift = (y) => { const k = clamp((lt - 2.0) / 3.5); return k * (Math.sin(y * .012) * 55 + (H - y) * .12); };
+    const ty = H + 60 - lt * speed;
+    ctx.strokeStyle = "#5fbf5a"; ctx.lineWidth = 8; ctx.setLineDash([10, 16]); ctx.beginPath();
+    for (let y = H; y >= Math.max(ty, -40); y -= 6) { const x = tx0 + drift(y); y === H ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+    ctx.stroke(); ctx.setLineDash([]);
+    // intended guide line
+    ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 2; ctx.setLineDash([4, 10]);
+    ctx.beginPath(); ctx.moveTo(tx0, H); ctx.lineTo(tx0, 0); ctx.stroke(); ctx.setLineDash([]);
+    const parked = lt > 6.1, py = parked ? H + 60 - 6.1 * speed : ty;
+    const px = tx0 + drift(py);
+    ctx.save(); ctx.translate(px, py); ctx.fillStyle = "#2f8f3a"; rrect(-38, -60, 76, 120, 12); ctx.fill();
+    ctx.fillStyle = "#1c1c1c"; ctx.fillRect(-52, -50, 16, 40); ctx.fillRect(36, -50, 16, 40); ctx.fillRect(-56, 10, 20, 52); ctx.fillRect(36, 10, 20, 52);
+    ctx.fillStyle = "#cde8d1"; rrect(-24, -10, 48, 40, 6); ctx.fill(); ctx.restore();
+    // GPS accuracy readout
+    const err = lt < 2 ? 0.02 : lerp(.02, 1.9, clamp((lt - 2) / 3.5));
+    const bad = err > .3;
+    panel(1340, 140, 470, 230, { fill: "rgba(10,14,20,.88)", stroke: bad ? C.red : C.line });
+    text("AUTO-STEER · GPS", 1375, 195, { size: 26, weight: 700, color: C.muted, spacing: 2 });
+    text(`± ${err < 1 ? (err * 100).toFixed(0) + " cm" : err.toFixed(1) + " m"}`, 1375, 290, { size: 84, weight: 800, color: bad ? C.red : C.green });
+    text(parked ? "PARKED" : bad ? "Drifting off line" : "Locked on line", 1375, 345, { size: 30, weight: 600, color: bad ? C.red : C.green });
+    ctx.restore();
+  }
+}
+
+// ---------- PROBLEM ----------
+function problem(t, L) {
+  bg(); stars(t, .5); chapter("THE PROBLEM", t);
+  const a = t < L[3] ? 1 : fout(t, L[3], .6);
+  if (a > 0) {
+    ctx.save(); ctx.globalAlpha = a;
+    // ground
+    ctx.fillStyle = "#0e1a12"; ctx.fillRect(0, 900, W, 180);
+    ctx.fillStyle = "#16261b"; ctx.fillRect(0, 900, W, 6);
+    const sats = [[420, 210], [960, 160], [1500, 220]];
+    sats.forEach(([x, y], i) => satellite(x, y + Math.sin(t + i) * 6, 1.1, fin(t, L[0] - .2 + i * .15)));
+    const rx = 960, ry = 840;
+    // charged layer
+    const layer = fin(t, L[1], .8), churn = clamp((t - L[2]) / 2);
+    if (layer > 0) {
+      ctx.save(); ctx.globalAlpha *= layer;
+      for (let k = 0; k < 4; k++) {
+        ctx.beginPath();
+        for (let x = 0; x <= W; x += 10) {
+          const y = 470 + k * 26 + Math.sin(x * .006 + t * (1 + churn * 3) + k) * (8 + churn * 34) + Math.sin(x * .021 - t * 2.3) * churn * 16;
+          x ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.lineTo(W, 620); ctx.lineTo(0, 620); ctx.closePath();
+        ctx.fillStyle = `rgba(167,139,250,${.07 + churn * .05})`; ctx.fill();
+      }
+      text("electrically charged air  (the ionosphere)", 80, 455, { size: 30, weight: 600, color: C.violet, alpha: layer });
+      ctx.restore();
+    }
+    // signals: straight, then bent
+    const sig = fin(t, L[0] + .4, .6);
+    sats.forEach(([sx, sy], i) => {
+      ctx.save(); ctx.globalAlpha *= sig; ctx.strokeStyle = churn > .1 ? C.red : C.teal; ctx.lineWidth = 3; ctx.setLineDash([14, 12]);
+      ctx.lineDashOffset = -t * 60;
+      const bend = churn * (i - 1 || .8) * 90;
+      ctx.beginPath(); ctx.moveTo(sx, sy + 30);
+      ctx.quadraticCurveTo(lerp(sx, rx, .55) + bend, 545, rx + churn * 4 * (i - 1) * 10, ry - 60); ctx.stroke(); ctx.restore();
+    });
+    // receiver: true vs reported position
+    car(rx, ry - 10, 1, C.amber, fin(t, L[0], .5));
+    const drift = churn * (90 + Math.sin(t * 2) * 25);
+    if (churn > 0) {
+      ctx.save(); ctx.globalAlpha *= churn;
+      ctx.strokeStyle = C.red; ctx.setLineDash([6, 8]); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(rx, ry - 90); ctx.lineTo(rx + drift * 2.2, ry - 140 - drift * .3); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = C.red; ctx.beginPath(); ctx.arc(rx + drift * 2.2, ry - 140 - drift * .3, 14, 0, 7); ctx.fill();
+      text("where GPS thinks you are", rx + drift * 2.2 + 26, ry - 150 - drift * .3, { size: 28, color: C.red, weight: 700 });
+      text("no warning light", 1420, 870, { size: 30, color: C.muted, weight: 600 });
+      ctx.restore();
+    }
+    ctx.fillStyle = C.teal; ctx.globalAlpha = a * fin(t, L[0] + .3); ctx.beginPath(); ctx.arc(rx, ry - 90, 10, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  // jargon wall collapsing into one planetary number
+  const j = fin(t, L[3], .5);
+  if (j > 0) {
+    const lt = t - L[3];
+    const words = ["Kp 6.33", "Bz −12.4 nT", "DONKI CME 2024-05-08T22:36Z", "GloTEC 87 TECU", "Dst −412 nT", "F10.7 211 sfu",
+      "X-ray flux 1e-4 W/m²", "Bt 72 nT", "SWPC G4 Watch", "Vsw 950 km/s", "ΔH/Δt", "AE 2650 nT", "R3 radio blackout", "S1 proton event"];
+    const r = rng(5), col = clamp((lt - 2.2) / 1.2);
+    ctx.save(); ctx.globalAlpha = j;
+    words.forEach((w, i) => {
+      const x0 = 160 + r() * 1500, y0 = 200 + r() * 700;
+      const x = lerp(x0, W / 2, ease(col)), y = lerp(y0, H / 2, ease(col));
+      text(w, x, y, { size: 30 + r() * 26, font: MONO, weight: 500, color: i % 3 ? C.muted : C.violet, align: "center", alpha: fin(t, L[3] + i * .07, .3) * (1 - col) });
+    });
+    if (col > 0) {
+      globe(W / 2, 560, 260, { rot: lt * 12, alpha: col });
+      ctx.save(); ctx.globalAlpha = col * .5; ctx.fillStyle = C.amber; ctx.beginPath(); ctx.arc(W / 2, 560, 260, 0, 7); ctx.fill(); ctx.restore();
+      text("Kp 7", W / 2, 600, { size: 130, weight: 800, align: "center", alpha: col });
+      text("one number for the entire planet", W / 2, 878, { size: 44, weight: 700, color: C.amber, align: "center", alpha: fin(t, L[3] + 2.8) });
+    }
+    ctx.restore();
+  }
+}
+
+// ---------- INSIGHT ----------
+function insight(t, L) {
+  bg(); stars(t, .5); chapter("OUR APPROACH", t);
+  const cx = 640, cy = 560, R = 330, rot = -60 + t * 4, tilt = 22;
+  const g = t < L[4] ? 1 : fout(t, L[4], .6);
+  if (g > 0) {
+    ctx.save(); ctx.globalAlpha = g;
+    // Sun appears for flares
+    const sunA = win(t, L[2] - .2, L[3] + .6, .6);
+    if (sunA > 0) sun(-80, cy, 180, t, sunA);
+    globe(cx, cy, R, { rot, tilt });
+    ctx.save(); clipGlobe(cx, cy, R);
+    // 0: uniform tint that breaks apart
+    const uni = win(t, 0, L[1] + .3, .5);
+    if (uni > 0) { ctx.globalAlpha = g * uni * .35; ctx.fillStyle = C.amber; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R); ctx.globalAlpha = g; }
+    // 1: aurora ring (strongest), moving toward the equator as the storm grows
+    const lat = win(t, L[1], L[4], .6);
+    if (lat > 0) {
+      const edge = lerp(66, 50, ease((t - L[1] - .8) / 3.2));
+      const bands = [[edge, 76, C.red, .62], [76, 90, C.amber, .35], [-76, -edge, C.red, .62], [-90, -76, C.amber, .35]];
+      for (const [a0, a1, col, al] of bands) {
+        ctx.beginPath(); const pts = [];
+        for (let lo = -180; lo <= 180; lo += 4) pts.push(proj(a1, lo, cx, cy, R, rot, tilt));
+        for (let lo = 180; lo >= -180; lo -= 4) pts.push(proj(a0, lo, cx, cy, R, rot, tilt));
+        pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+        ctx.globalAlpha = g * lat * al * (t > L[2] ? .55 : 1); ctx.fillStyle = col; ctx.fill();
+      }
+      ctx.globalAlpha = g;
+    }
+    // 2: day/night terminator (sun on the left)
+    const dn = win(t, L[2], L[4], .6);
+    if (dn > 0) {
+      const sh = ctx.createLinearGradient(cx - R * .1, 0, cx + R * .35, 0);
+      sh.addColorStop(0, "rgba(0,0,0,0)"); sh.addColorStop(1, "rgba(0,0,0,.72)");
+      ctx.globalAlpha = g * dn; ctx.fillStyle = sh; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+      // flare rays hit the day side only
+      for (let k = 0; k < 7; k++) {
+        const yy = cy - R * .8 + k * R * .27, ph = ((t * 1.4 + k * .37) % 1);
+        const x0 = cx - R + ph * R * .9, gr = ctx.createLinearGradient(x0 - 160, 0, x0, 0);
+        gr.addColorStop(0, "rgba(255,210,122,0)"); gr.addColorStop(1, "rgba(255,210,122,.95)");
+        ctx.globalAlpha = g * dn * (1 - ph); ctx.fillStyle = gr; ctx.fillRect(x0 - 160, yy - 3, 160, 6);
+      }
+      ctx.globalAlpha = g;
+    }
+    // 3: patchy charged layer
+    const pt = win(t, L[3], L[4], .6);
+    if (pt > 0) {
+      const r = rng(9);
+      for (let k = 0; k < 9; k++) {
+        const la = r() * 100 - 50, lo = r() * 360 - 180, s = 50 + r() * 90;
+        const [x, y, z] = proj(la, lo, cx, cy, R, rot, tilt); if (z <= 0) continue;
+        const gg = ctx.createRadialGradient(x, y, 0, x, y, s);
+        gg.addColorStop(0, `rgba(196,181,253,${.75 * pt})`); gg.addColorStop(1, "rgba(196,181,253,0)");
+        ctx.globalAlpha = g; ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x, y, s, 0, 7); ctx.fill();
+      }
+    }
+    ctx.restore();
+    ctx.restore();
+    // right-hand checklist
+    const items = [[L[1], C.red, "Strongest in the aurora ring", "moves toward the equator in big storms"],
+      [L[2], C.amber, "Flares hit only the sunlit side", "and only while the flare lasts"],
+      [L[3], C.violet, "The charged layer is patchy", "local electron content"]];
+    items.forEach(([s, col, h, sub], i) => {
+      const a = fin(t, s, .5) * g; if (a <= 0) return;
+      const y = 300 + i * 190, x = 1100 + (1 - a) * 40;
+      ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + 18, y - 16, 18, 0, 7); ctx.fill(); ctx.restore();
+      text(h, x + 60, y, { size: 46, weight: 700, alpha: a });
+      text(sub, x + 60, y + 50, { size: 30, weight: 500, color: C.muted, alpha: a });
+    });
+    ctx.restore();
+  }
+  // 4: the weather-forecast analogy
+  const an = win(t, L[4], L[5] + .2, .6);
+  if (an > 0) {
+    ctx.save(); ctx.globalAlpha = an;
+    panel(260, 260, 560, 520, { fill: "#101820" });
+    text("TODAY · PLANET EARTH", 540, 340, { size: 30, weight: 700, color: C.muted, align: "center", spacing: 2 });
+    text("15°", 540, 560, { size: 200, weight: 800, align: "center" });
+    text("one number for everyone", 540, 690, { size: 32, weight: 600, color: C.muted, align: "center" });
+    const cross = fin(t, L[4] + 2.2, .4);
+    if (cross > 0) { ctx.strokeStyle = C.red; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(300, 300); ctx.lineTo(300 + 480 * cross, 300 + 440 * cross); ctx.stroke(); }
+    const cities = [["Oslo", "−9°", "#93c5fd"], ["Toronto", "−2°", "#93c5fd"], ["Cairo", "31°", C.amber], ["Singapore", "33°", C.red]];
+    cities.forEach(([n, v, col], i) => {
+      const a = fin(t, L[4] + 1 + i * .25, .4); const y = 300 + i * 125;
+      panel(1040, y, 620, 100, { alpha: a, fill: "#101820" });
+      text(n, 1080, y + 64, { size: 40, weight: 600, alpha: a });
+      text(v, 1620, y + 66, { size: 52, weight: 800, color: col, align: "right", alpha: a });
+    });
+    ctx.restore();
+  }
+  // 5: your spot -> one local risk score
+  const ys = fin(t, L[5], .7);
+  if (ys > 0) {
+    ctx.save(); ctx.globalAlpha = ys;
+    globe(560, 560, 300, { rot: -79, tilt: 40 });
+    const [px, py] = proj(43.65, -79.38, 560, 560, 300, -79, 40);
+    const pulse = (t * 1.2) % 1;
+    ctx.strokeStyle = C.amber; ctx.lineWidth = 4; ctx.globalAlpha = ys * (1 - pulse);
+    ctx.beginPath(); ctx.arc(px, py, 14 + pulse * 60, 0, 7); ctx.stroke(); ctx.globalAlpha = ys;
+    ctx.fillStyle = C.amber; ctx.beginPath(); ctx.arc(px, py, 14, 0, 7); ctx.fill();
+    text("your spot", px + 26, py - 20, { size: 32, weight: 700, color: C.amber });
+    const lines = [["storm level × your latitude", C.red], ["+ flare in progress, if sunlit", C.amber], ["+ the charged layer above you", C.violet]];
+    lines.forEach(([s, col], i) => text(s, 1000, 360 + i * 80, { size: 42, weight: 600, color: col, alpha: fin(t, L[5] + .3 + i * .35, .4) }));
+    const sc = fin(t, L[5] + 1.6, .5);
+    ctx.fillStyle = C.line; ctx.globalAlpha = ys * sc; ctx.fillRect(1000, 610, 720, 3); ctx.globalAlpha = ys;
+    text("= GPS risk, 0 – 100,", 1000, 700, { size: 54, weight: 800, alpha: sc });
+    text("for where you actually are", 1000, 768, { size: 54, weight: 800, color: C.amber, alpha: sc });
+    ctx.restore();
+  }
+}
+
+// ---------- TRUST ----------
+const CODE = [
+  "def high_band_start(kp=None):",
+  "    \"\"\"|Geomagnetic latitude| where the full Kp term starts, for this Kp.\"\"\"",
+  "    if kp is None:",
+  "        return MLAT_HIGH",
+  "    return min(MLAT_HIGH, AURORA_EDGE_KP0 - AURORA_EDGE_PER_KP * float(kp))",
+  "",
+  "def score_for(kp=None, forecast_max_kp=None, xray_flux=None,",
+  "              cme_arrivals=None, tec_local=None, dayside=True, kp_factor=1.0):",
+  "    base_kp = _base_kp(kp, forecast_max_kp)",
+  "    flare = _flare_bonus(xray_flux) if dayside else 0",
+  "    s = base_kp * W_KP * kp_factor + flare + _cme_bonus(cme_arrivals or [])",
+  "    if tec_local is not None and tec_local >= TEC_HIGH_TECU:",
+  "        s += W_TEC_HIGH",
+  "    s = max(0, min(100, round(s)))",
+  "    level = \"CRITICAL\" if s >= 70 else (\"MODERATE\" if s >= 40 else \"LOW\")",
+  "    return {\"score\": s, \"level\": level}",
+];
+function trust(t, L) {
+  bg(); chapter("WHY YOU CAN TRUST IT", t);
+  // 0: real code from backend/risk.py
+  const c = win(t, L[0], L[2] - .1, .6);
+  if (c > 0) {
+    ctx.save(); ctx.globalAlpha = c;
+    panel(110, 130, 1700, 550, { fill: "#0b1219" });
+    text("backend/risk.py", 150, 190, { size: 26, font: MONO, color: C.muted, weight: 500 });
+    pill("NOT AI · FIXED FORMULA", 1450, 182, { bg: "#0f2e2a", fg: C.teal, size: 24 });
+    const hi = { 9: L[1] + .2, 10: L[1] + .2, 11: L[1] + 1.4, 12: L[1] + 1.4, 4: L[1] + 2.0, 14: L[1] + 2.6 };
+    CODE.forEach((ln, i) => {
+      const y = 236 + i * 28;
+      if (hi[i] != null) { const h = fin(t, hi[i], .4); ctx.fillStyle = `rgba(245,166,35,${.16 * h})`; ctx.fillRect(130, y - 21, 1660, 28); }
+      const col = [0, 6, 7, 15].includes(i) ? "#9cc4ff" : i === 1 ? C.muted : C.text;
+      text(ln, 150, y, { size: 22, font: MONO, weight: 500, color: col, alpha: fin(t, L[0] + i * .05, .3) });
+    });
+    // plain-English weights
+    const w = [["each storm level", "+10"], ["flare in progress (sunlit)", "+15 / +25"], ["plasma cloud incoming", "+20"], ["thick charged layer", "+10"]];
+    w.forEach(([k, v], i) => {
+      const a = fin(t, L[1] + i * .6, .4); const x = 110 + i * 432;
+      panel(x, 700, 410, 140, { alpha: a, fill: "#101820" });
+      text(v, x + 30, 770, { size: 52, weight: 800, color: C.amber, alpha: a });
+      text(k, x + 30, 816, { size: 28, weight: 600, color: C.muted, alpha: a });
+    });
+    text("≥ 70 CRITICAL  ·  40–69 MODERATE  ·  < 40 LOW", W / 2, 885, { size: 32, weight: 700, color: C.muted, align: "center", alpha: fin(t, L[1] + 2.6) });
+    ctx.restore();
+  }
+  // 2: AI only writes the words
+  const p = win(t, L[2], L[3] - .1, .5);
+  if (p > 0) {
+    ctx.save(); ctx.globalAlpha = p;
+    const boxes = [[140, "open data", "NOAA · NASA · GFZ", C.teal], [700, "formula", "72 · CRITICAL", C.red], [1260, "AI writer", "“Expect GPS outages; switch to map fallback.”", C.violet]];
+    boxes.forEach(([x, h, s, col], i) => {
+      const a = fin(t, L[2] + i * .45, .4);
+      panel(x, 380, 520, 260, { alpha: a, stroke: col, fill: "#0e151d" });
+      text(h.toUpperCase(), x + 40, 440, { size: 26, weight: 800, color: col, spacing: 3, alpha: a });
+      if (i === 2) { text("“Expect GPS outages;", x + 40, 520, { size: 36, weight: 600, alpha: a }); text("switch to map fallback.”", x + 40, 570, { size: 36, weight: 600, alpha: a }); }
+      else text(s, x + 40, 545, { size: i === 1 ? 58 : 40, weight: 800, alpha: a });
+      if (i < 2) { ctx.fillStyle = C.muted; ctx.globalAlpha = p * a; ctx.beginPath(); ctx.moveTo(x + 545, 495); ctx.lineTo(x + 580, 510); ctx.lineTo(x + 545, 525); ctx.fill(); ctx.globalAlpha = p; }
+    });
+    const lk = fin(t, L[2] + 1.6, .4);
+    pill("🔒 number locked", 790, 700, { bg: "#3d1414", fg: C.red, size: 30, alpha: lk });
+    text("Meta open model on Baseten · writes words, never the score", W / 2, 860, { size: 34, weight: 600, color: C.muted, align: "center", alpha: lk });
+    ctx.restore();
+  }
+  // 3: a feed goes dark -> degraded, still scoring
+  const d = fin(t, L[3], .5);
+  if (d > 0) {
+    ctx.save(); ctx.globalAlpha = d; const lt = t - L[3];
+    const feeds = ["NOAA SWPC", "NASA DONKI", "GloTEC", "Kyoto Dst", "GFZ Kp"];
+    feeds.forEach((f, i) => {
+      const y = 260 + i * 120, dead = i === 1 && lt > 1.4;
+      panel(160, y, 500, 92, { fill: "#0e151d", stroke: dead ? C.red : C.line });
+      ctx.fillStyle = dead ? C.red : C.green; ctx.beginPath(); ctx.arc(205, y + 46, 12, 0, 7); ctx.fill();
+      text(f, 240, y + 58, { size: 36, weight: 600, color: dead ? C.red : C.text });
+      if (dead) text("offline", 630, y + 58, { size: 28, weight: 700, color: C.red, align: "right" });
+      // connector into the score panel; a moving dot while the feed is up
+      ctx.strokeStyle = dead ? "rgba(248,113,113,.35)" : "rgba(45,212,191,.45)"; ctx.lineWidth = 2;
+      if (dead) ctx.setLineDash([8, 10]);
+      ctx.beginPath(); ctx.moveTo(660, y + 46); ctx.bezierCurveTo(860, y + 46, 860, 540, 1060, 540); ctx.stroke(); ctx.setLineDash([]);
+      if (!dead) { const k = (t * .7 + i * .21) % 1, u = 1 - k;
+        const bx = u*u*u*660 + 3*u*u*k*860 + 3*u*k*k*860 + k*k*k*1060, by = u*u*u*(y+46) + 3*u*u*k*(y+46) + 3*u*k*k*540 + k*k*k*540;
+        ctx.fillStyle = C.teal; ctx.beginPath(); ctx.arc(bx, by, 6, 0, 7); ctx.fill(); }
+    });
+    panel(1060, 330, 700, 420, { fill: "#121a22" });
+    text("Every 15 min · serverless on Modal", 1100, 400, { size: 28, weight: 600, color: C.muted });
+    pill("MODERATE", 1100, 480, { bg: "#3a2c07", fg: C.amber, size: 30 });
+    text("40/100", 1330, 495, { size: 52, weight: 800 });
+    pill("DEGRADED MODE", 1100, 580, { bg: "#2a2438", fg: C.violet, size: 30, alpha: fin(t, L[3] + 2.0, .4) });
+    text("still scoring on NOAA's baseline", 1100, 680, { size: 34, weight: 600, color: C.teal, alpha: fin(t, L[3] + 3.2, .4) });
+    text("never a guessed number", 1100, 725, { size: 30, weight: 500, color: C.muted, alpha: fin(t, L[3] + 3.6, .4) });
+    ctx.restore();
+  }
+}
+
+// ---------- CLOSE ----------
+function close(t, L, dur) {
+  bg(); stars(t, .8);
+  sun(-120, 540, 260, t, .9);
+  for (const p of PARTS.slice(0, 400)) {
+    const life = (t * .12 * p.v + p.o) % 1; ctx.globalAlpha = (1 - life) * .5;
+    ctx.fillStyle = "#ffb54a"; ctx.fillRect(life * W, 540 + p.y * (200 + life * 700), p.s * 2.4, p.s);
+  }
+  ctx.globalAlpha = 1;
+  const a = fin(t, L[1] - .2, .8);
+  text("Solar-GPS-Guardian", W / 2, 470, { size: 120, weight: 800, align: "center", alpha: a });
+  text("Know before your GPS does.", W / 2, 560, { size: 54, weight: 600, color: C.amber, align: "center", alpha: fin(t, L[1] + 1.2, .6) });
+  const u = fin(t, L[1] + 2.4, .6);
+  text("solar-gps-guardian.ninefruits.work", W / 2, 700, { size: 44, weight: 700, color: C.teal, align: "center", alpha: u });
+  text("github.com/humble92/solar-gps-guardian", W / 2, 765, { size: 34, weight: 500, color: C.muted, align: "center", font: MONO, alpha: u });
+  text("Built on Modal · Baseten · Meta open model · NOAA & NASA open data", W / 2, 960, { size: 28, weight: 600, color: C.muted, align: "center", alpha: fin(t, L[1] + 4.3, .6) });
+  if (t < L[1] - .2) text("The next storm is already on its way.", W / 2, 540, { size: 64, weight: 700, align: "center", alpha: win(t, L[0], L[1] - .2, .6) });
+  const end = clamp((t - (dur - 1.2)) / 1.2); if (end > 0) { ctx.fillStyle = `rgba(0,0,0,${end})`; ctx.fillRect(0, 0, W, H); }
+}
+
+const SCENES = { hook, problem, insight, trust, close };
+window.renderAt = (t) => {
+  const s = window.SCENE; ctx.save(); ctx.globalAlpha = 1;
+  SCENES[s.name](t, s.lines, s.dur); ctx.restore();
+  // short fades at scene edges so cuts never pop
+  const e = Math.min(clamp(t / .35), clamp((s.dur - t) / .35));
+  if (e < 1 && s.name !== "close") { ctx.fillStyle = `rgba(0,0,0,${1 - e})`; ctx.fillRect(0, 0, W, H); }
+};
+</script></body></html>

@@ -3,7 +3,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import {
   DEMO_RISK, DEMO_SNAPSHOT, SIM_RISK, fetchLocalScore, fetchPlanetaryRisk, fetchRouteScore,
-  fetchSnapshot, geocode, osrmRoute, reverseGeocode, sampleRoute, subscribe,
+  fetchSnapshot, geocode, osrmRoute, reverseGeocode, sampleRoute, subscribe, xrayClass,
   type Risk, type Snapshot,
 } from "@/lib/api";
 
@@ -19,7 +19,7 @@ const SIM_STORM: Snapshot = {
   flags: { donki_available: true, tec_available: true, stale_sources: [] },
   now: { kp: 8.3, kp_1m: 8.0, sw_speed: 920, bz_gsm: -28, bt: 34, spacecraft: "SOLAR1 (simulated)" },
   forecast_3d: { max_kp: 9.0, storm_expected: true },
-  events: { worst_flare_7d: "X4.2", cme_earth_arrivals: [{ arrival: "+18h" }] },
+  events: { worst_flare_7d: "X4.2", xray_flux: 4.2e-4, cme_earth_arrivals: [{ arrival: "+18h" }] },
   tec: { available: true, tec_max: 120 },
 };
 
@@ -191,7 +191,8 @@ export default function Home() {
           <div className="muted">{shown.forecast_3d.storm_expected ? "Storm expected" : "No storm expected"}</div></div>
         <div className="card"><h3>Strongest flare (7d)</h3>
           <div className="big">{shown.events.worst_flare_7d || "-"}</div>
-          <div className="muted">M/X flares: {shown.events.mx_flares_7d ?? 0}</div></div>
+          <div className="muted">X-ray now {xrayClass(shown.events.xray_flux) ?? "-"} (scored, day side)
+            - M/X flares: {shown.events.mx_flares_7d ?? 0}</div></div>
         <div className="card"><h3>Your position</h3>
           <div className="big" style={{ fontSize: 20 }}>{locName}</div>
           <div className="muted">{loc[0].toFixed(3)}, {loc[1].toFixed(3)}
@@ -199,6 +200,10 @@ export default function Home() {
               ? ` - local TEC ${Number(risk.inputs.tec_local).toFixed(0)} TECU`
               : ` - TEC feed ${shown.tec.available ? "available" : "unavailable"}`}
             {risk?.inputs?.kp_band ? ` - ${String(risk.inputs.kp_band)} geomagnetic latitude` : ""}
+            {risk?.inputs?.tec_anomaly != null
+              ? ` - TEC ${Number(risk.inputs.tec_anomaly) >= 0 ? "+" : ""}${Number(risk.inputs.tec_anomaly).toFixed(0)} vs 30-day median`
+              : ""}
+            {risk?.inputs?.aurora_local != null ? ` - aurora oval ${String(risk.inputs.aurora_local)}/100 (OVATION)` : ""}
           </div></div>
       </div>
 

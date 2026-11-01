@@ -11,6 +11,7 @@ CDAWeb/OMNI is not on the live pipeline. Every other function uses Modal's
 default region (1.0x). MODAL_REGION is logged once a container is running.
 """
 import os
+import time
 from pathlib import Path
 
 import modal
@@ -100,19 +101,43 @@ def _run_pipeline():
     return pipeline.run_pipeline(fetchers={pid: _remote(pid) for pid in US_PROVIDERS})
 
 
+VOLUME_RELOAD_SECONDS = 60
+_last_reload = [0.0]
+
+
+def _fresh_volume():
+    """A warm API container keeps the volume as it was at startup.
+
+    The ingest cron commits a new snapshot every 5 minutes, so reload at
+    most once a minute. An open file can make reload fail; the next call
+    retries.
+    """
+    now = time.monotonic()
+    if now - _last_reload[0] < VOLUME_RELOAD_SECONDS:
+        return
+    _last_reload[0] = now
+    try:
+        vol.reload()
+    except Exception as e:  # noqa: BLE001 - serve the current view, retry later
+        print(f"volume reload failed task={os.environ.get('MODAL_TASK_ID')}: "
+              f"{type(e).__name__}: {e}", flush=True)
+
+
 def _view_snapshot():
-    """Planetary snapshot plus the TEC grid. A cache miss does not write the row."""
+    """Planetary snapshot plus TEC and aurora grids. A cache miss does not write the row."""
+    _fresh_volume()
     store = _store()
     snap = store.load_snapshot()
     grid = store.load_tec_grid()
+    aurora = store.load_aurora_grid()
     if not snap:
         snap = _run_pipeline()
-        fresh = snap.pop("_tec_grid", None)
-        if fresh:
-            grid = fresh
+        grid = snap.pop("_tec_grid", None) or grid
+        aurora = snap.pop("_aurora_grid", None) or aurora
     elif isinstance(snap, dict):
         snap.pop("_tec_grid", None)
-    return snap, grid or []
+        snap.pop("_aurora_grid", None)
+    return snap, grid or [], aurora or []
 
 
 # Stdlib-only image: this container exists just long enough to call DONKI.
@@ -147,7 +172,9 @@ def ingest_once():
         _log_placement("ingest_once.end")
 
 
-@app.function(**_function_kwargs(timeout=300, schedule=modal.Period(minutes=15)))
+# Timeout stays under the 5-minute period so two ingests never overlap and
+# race to commit the same SQLite file on the volume.
+@app.function(**_function_kwargs(timeout=240, schedule=modal.Period(minutes=5)))
 def ingest_cron():
     _log_placement("ingest_cron.start")
     try:
@@ -225,15 +252,15 @@ def api():
 
     @web.get("/snapshot")
     def snapshot():
-        snap, _grid = _view_snapshot()
+        snap, _grid, _aurora = _view_snapshot()
         return snap
 
     @web.get("/local-score")
     def local_score_ep(lat: float, lon: float):
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
             return {"error": "lat/lon out of range"}
-        snap, grid = _view_snapshot()
-        return local_score.score_point(snap, lat, lon, grid)
+        snap, grid, aurora = _view_snapshot()
+        return local_score.score_point(snap, lat, lon, grid, aurora)
 
     @web.post("/route-score")
     def route_score_ep(body: dict):
@@ -245,15 +272,16 @@ def api():
                 continue
             if -90 <= lat <= 90 and -180 <= lon <= 180:
                 clean.append({"lat": lat, "lon": lon, "label": str(p.get("label") or len(clean))})
-        snap, grid = _view_snapshot()
+        snap, grid, aurora = _view_snapshot()
         scenario = body.get("scenario")
         if scenario not in (None, "", "storm"):
             scenario = None
-        return local_score.score_route(snap, clean, grid, scenario=scenario or None)
+        return local_score.score_route(snap, clean, grid, scenario=scenario or None,
+                                       aurora=aurora)
 
     @web.get("/risk")
     def risk_ep():
-        snap, _grid = _view_snapshot()
+        snap, _grid, _aurora = _view_snapshot()
         return llm.advisory(snap)
 
     @web.get("/health")

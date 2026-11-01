@@ -4,45 +4,51 @@ The site has a dashboard and a monthly newsletter. The dashboard shows the
 current GPS risk, a map, a route check, and an email subscription. There is
 no account and no login. The header links Dashboard and Newsletters.
 
-The demo and simulated-storm screenshots were taken with `npm run dev` and
-`NEXT_PUBLIC_API_BASE=https://address`. That host does not exist, so the
-snapshot request fails, the badge stays on demo data, and the page prints
-`TypeError: Failed to fetch`. With an empty `NEXT_PUBLIC_API_BASE` the same
-demo numbers appear and Subscribe reports that nothing was stored. With a
-real Modal URL the badge switches to LIVE when `GET /snapshot` succeeds.
+The screenshots were taken on 2026-10-31 at 20:12 UTC from a production
+build (`next build`, `next start`) at a 1280-pixel-wide window, with the
+browser position set to Toronto. The live captures use the current backend
+code on that hour's live feeds. The demo capture uses an empty
+`NEXT_PUBLIC_API_BASE`, so the page shows the built-in sample and Subscribe
+reports that nothing was stored. With a real Modal URL the badge switches to
+LIVE when `GET /snapshot` succeeds.
 
 ## Live snapshot
 
 ![Dashboard on a live snapshot](images/ui-live.png)
 
-This capture uses
-`NEXT_PUBLIC_API_BASE=https://humble92--solar-gps-guardian-api.us-east.modal.run`.
-`GET /snapshot` succeeded, so the badge is LIVE and the fetch error is gone.
-
-The banner is MODERATE, 50/100. The browser score uses the larger of the
-current Kp (0.67, from ACE) and the 3-day maximum (Kp 5). The forecast card
-says a storm is expected. The strongest flare in seven days is C3.3, and the
-TEC feed is available. DEGRADED MODE is absent because both DONKI and TEC
-were present in this snapshot. The amber pin is still on Toronto.
+`GET /snapshot` succeeded, so the badge is LIVE. The banner is the
+`/local-score` result for Toronto: MODERATE, 40/100. The Kp term uses the
+largest of the SWPC current Kp (3.33, from ACE), the GFZ nowcast, and the
+3-day maximum (Kp 5), times
+0.8 for Toronto's mid geomagnetic latitude: 5 x 10 x 0.8 = 40. The current
+X-ray class is B3.2, below M, so there is no flare bonus. The strongest
+flare in seven days is C2.8, shown but not scored. Local TEC is 31 TECU,
+under the 50 TECU threshold. DEGRADED MODE is absent because both DONKI and
+TEC were present in this snapshot. The amber pin is on Toronto.
 
 ## Demo data
 
 ![Dashboard on demo data](images/ui-demo.png)
 
-The banner is the score the browser computes from the snapshot. In this
-capture it is LOW, 30/100, because the built-in demo uses Kp 2 and a 3-day
-maximum of Kp 3.
+The banner is a fixed label for the built-in sample, not a server score:
+LOW, 30/100, for the demo's Kp 2 and 3-day maximum of Kp 3. The sample has
+no DONKI or TEC data, so DEGRADED MODE is shown next to DEMO DATA.
 
 | Badge | Meaning |
 |---|---|
 | LOW, MODERATE, CRITICAL | Score bands: under 40, 40 to 69, 70 and above. |
 | DEMO DATA | No live snapshot. The page is using the built-in sample. |
 | LIVE | `GET /snapshot` returned a snapshot. |
-| DEGRADED MODE | DONKI or the TEC feed was missing. The SWPC numbers are still shown. |
+| DEGRADED MODE | DONKI or GloTEC was missing in this snapshot. The sentence names which one. The score still uses every feed that answered (SWPC Kp, GOES X-ray, OVATION, and a TEC grid up to 3 hours old). |
 | SIMULATED STORM | The view is the superstorm card. The numbers are not a measurement. |
 
 The four cards are the current solar-wind sample, the 3-day forecast
 maximum Kp, the strongest flare in seven days, and the browser position.
+The position card adds the local TEC deviation from its 30-day median and
+the OVATION aurora value when those grids cover the place. The flare card
+also prints the current GOES X-ray class. Only that current
+class is scored, and only on the day side. The seven-day flare is shown for
+context.
 Until geolocation answers, the position is Toronto. TEC on the demo sample
 is unavailable.
 
@@ -50,9 +56,13 @@ The map is Leaflet on OpenStreetMap tiles, centered on that position. An amber p
 
 ## Route
 
+![Toronto to Ottawa route check](images/ui-route.png)
+
 From and To are place names. Assess route asks Nominatim for coordinates and
 OSRM for a driving path. Those two calls stay in the browser. The page draws
-the full path and prints distance and duration.
+the full path and prints distance and duration. In the capture above,
+Toronto to Ottawa is 449.8 km, about 317 minutes. All 8 samples scored
+MODERATE, 40/100 (range 40-40), so the line is amber.
 
 The corridor score is not the banner score copied onto the line. The page
 keeps at most 8 vertices from the OSRM line. The first vertex and the last
@@ -62,8 +72,9 @@ along the road. A shorter line, one with 8 or fewer vertices, sends every
 vertex. Those points go to `POST /route-score`.
 
 Each sample uses the same score as the banner and the mail: nearest TEC
-cell, geomagnetic-latitude band on the Kp term only, and no flare bonus on
-the night side. Planetary Kp, the 3-day forecast, and any Earth-arrival CME
+cell, geomagnetic-latitude band on the Kp term only (the high band reaches
+farther south in strong storms), and no bonus for a flare in progress on the
+night side. Planetary Kp, the 3-day forecast, and any Earth-arrival CME
 are the same at every sample. What can differ along the road is TEC, the
 latitude band, and day or night. The server accepts at most 16 points. The
 page sends 8.
@@ -90,7 +101,7 @@ One button cycles through three views. The label is the next view.
 1. Live. The button reads Simulate solar superstorm. The banner is the
    position score.
 2. Superstorm. The first click replaces the snapshot with fixed storm
-   numbers: Kp 8.3, forecast maximum Kp 9, an X4.2 flare, and an
+   numbers: Kp 8.3, forecast maximum Kp 9, an X4.2 flare in progress, and an
    Earth-arrival CME. The banner becomes CRITICAL, 100/100, and the badge
    says SIMULATED STORM. The map center and zoom return to the Toronto
    region (zoom 9), From and To reset to Toronto, ON and Hamilton, ON, and
@@ -103,10 +114,18 @@ One button cycles through three views. The label is the next view.
    Toronto, ON and Hamilton, ON. The page draws that OSRM path, samples up
    to 8 vertices, and posts them to `/route-score` with `scenario` set to
    `storm`. The server scores those samples with the same superstorm
-   numbers (Kp 8.3, forecast maximum Kp 9, flare X4.2, one Earth-arrival
-   CME). The clock and the TEC grid stay live, so night side and local TEC
-   still change the sample. The line color and the sentence use the
-   highest of those hypothetical samples. The button then reads Back to Live.
+   numbers (Kp 8.3, forecast maximum Kp 9, an X4.2 flare in progress, one
+   Earth-arrival CME). The clock and the TEC grid stay live, so night side
+   and local TEC still change the sample. The line color and the sentence
+   use the highest of those hypothetical samples. The button then reads
+   Back to Live.
+
+   ![Simulated route risk, Toronto to Hamilton](images/ui-route-storm.png)
+
+   In this capture every sample is CRITICAL, 100/100, and the line is red.
+   Under Kp 9 the high latitude band starts at 49.8 degrees, so Toronto
+   (53.0 degrees geomagnetic) keeps the full Kp term (x1.0) instead of the
+   0.8 it gets on a quiet day.
 4. The next click clears that path and returns to the live view.
 
 None of these steps writes the database or sends mail.
@@ -119,8 +138,7 @@ region. The server stores that row and returns an unsubscribe token.
 
 If the API base is empty, the button does not call a server. The message is
 "Demo mode: no backend configured, subscription NOT stored." If the base is
-set and the host is down, the message is a fetch error, as in the
-screenshots.
+set and the host is down, the message is a fetch error.
 
 A stored subscription receives one daily digest, subject "Solar wind daily
 digest". An extra message, subject "Solar wind Critical Alarm", is sent only

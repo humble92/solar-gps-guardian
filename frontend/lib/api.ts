@@ -7,7 +7,7 @@ export type Snapshot = {
          bz_gsm: number | null; bt: number | null; spacecraft: string | null;
          g_scale?: { Scale?: string } };
   forecast_3d: { max_kp: number | null; storm_expected?: boolean };
-  events: { worst_flare_7d: string | null; mx_flares_7d?: number;
+  events: { worst_flare_7d: string | null; mx_flares_7d?: number; xray_flux?: number | null;
             cme_earth_arrivals?: { arrival?: string }[] };
   tec: { available: boolean; latest_time?: string; tec_max?: number | null };
 };
@@ -34,7 +34,7 @@ export const DEMO_SNAPSHOT: Snapshot = {
   flags: { donki_available: false, tec_available: false, stale_sources: ["demo"] },
   now: { kp: 2.0, kp_1m: 0.0, sw_speed: 378, bz_gsm: 4.8, bt: 6.1, spacecraft: "SOLAR1" },
   forecast_3d: { max_kp: 3.0 },
-  events: { worst_flare_7d: "C3.5", cme_earth_arrivals: [] },
+  events: { worst_flare_7d: "C3.5", xray_flux: 2.0e-7, cme_earth_arrivals: [] },
   tec: { available: false },
 };
 
@@ -47,8 +47,17 @@ export const DEMO_RISK: Risk = {
 /** Fixed label for the simulate toggle. The server does not see this card. */
 export const SIM_RISK: Risk = {
   score: 100, level: "CRITICAL", advisory_source: "simulated",
-  advisory: "GPS risk CRITICAL (100/100). Simulated superstorm: planetary Kp 8.3, forecast max 9, flare X4.2, Earth-arrival CME. This card is not a local score.",
+  advisory: "GPS risk CRITICAL (100/100). Simulated superstorm: planetary Kp 8.3, forecast max 9, X4.2 flare in progress, Earth-arrival CME. This card is not a local score.",
 };
+
+/** GOES long-band flux (W/m^2) -> class label such as "M2.3" (same rule as backend/risk.py). */
+export function xrayClass(flux?: number | null): string | null {
+  if (flux == null || flux <= 0) return null;
+  for (const [letter, floor] of [["X", 1e-4], ["M", 1e-5], ["C", 1e-6], ["B", 1e-7], ["A", 1e-8]] as const) {
+    if (flux >= floor) return `${letter}${(flux / floor).toFixed(1)}`;
+  }
+  return `A${(flux / 1e-8).toFixed(1)}`;
+}
 
 function asRisk(j: unknown): Risk | null {
   if (!j || typeof j !== "object") return null;

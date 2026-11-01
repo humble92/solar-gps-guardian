@@ -57,8 +57,6 @@ def digest_for(sub, snapshot, kind="daily", scored=None):
         f"{r['advisory']}\n"
         f"{where}"
     )
-    if snapshot.get("degraded"):
-        body += "(Note: degraded mode - SWPC baseline only.)\n"
     tok = sign(sub["email"])
     body += (f"\nUnsubscribe: /unsubscribe?email={sub['email']}&token={tok}\n")
     return subject, body
@@ -94,23 +92,24 @@ def deliver(to, subject, body, dry_dir=None):
     return "smtp"
 
 
-def _score_sub(sub, snapshot, grid):
+def _score_sub(sub, snapshot, grid, aurora=None):
     lat, lon = sub.get("lat"), sub.get("lon")
     if lat is None or lon is None:
         return risk_mod.assess(snapshot)
-    return score_point(snapshot, lat, lon, grid)
+    return score_point(snapshot, lat, lon, grid, aurora)
 
 
 def run_batch(store, snapshot, kind="daily", dry_dir=None, force=False):
     """kind: 'daily' (everyone) or 'storm' (only subscribers whose local score is CRITICAL)."""
     grid = store.load_tec_grid()
+    aurora = store.load_aurora_grid()
     if kind == "storm":
         event_key = f"{snapshot.get('fetched_at', '')[:13]}-CRITICAL"
     else:
         event_key = snapshot.get("fetched_at", "")[:10]
     sent, paths = 0, []
     for sub in store.list_active():
-        scored = _score_sub(sub, snapshot, grid)
+        scored = _score_sub(sub, snapshot, grid, aurora)
         if kind == "storm" and scored["level"] != "CRITICAL" and not force:
             continue
         email = sub["email"]

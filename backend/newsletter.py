@@ -122,7 +122,8 @@ def collect(w):
             pkg["sources"][name] = f"failed: {type(e).__name__}"
     pkg["notes"] = [
         "Kyoto Dst values are provisional and may be revised.",
-        "RTSW/GloTEC have no public monthly archive; excluded from this letter.",
+        "RTSW and OVATION keep no archive, and GloTEC keeps only a rolling 31-day "
+        "folder; excluded from this letter.",
     ]
     return pkg
 
